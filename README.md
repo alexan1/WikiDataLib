@@ -18,7 +18,7 @@ Remark: This is anync method.
 
 where
 
-<code>
+```
     public class WikiPerson
     {
         public int Id { get; set; }
@@ -34,4 +34,4 @@ where
         public string Link { get; set; }
         //public decimal Rating { get; set; }
     }
-</code>
+```
