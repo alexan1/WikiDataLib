@@ -34,3 +34,5 @@ where
         public string Link { get; set; }       
     }
 ```
+
+Sample: `People = await WikiData.WikiSearch(SearchName);`
