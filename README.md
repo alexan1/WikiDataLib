@@ -10,7 +10,7 @@ Namespace: WikiDataLib
 
 Get collection of people with specific name.
 
-Remark: This is anync method.
+<b>Remark:</b> This is anync method.
 
 ### WikiSearch(String)
 
