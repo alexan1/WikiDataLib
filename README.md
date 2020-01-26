@@ -12,14 +12,16 @@ Get collection of people with specific name.
 
 <b>Remark:</b> This is anync method.
 
-### WikiSearch(String)
-
 `public async static Task<Collection<WikiPerson>> WikiSearch(string searchString)`
 
 <b>Sample:</b> 
 `People = await WikiData.WikiSearch(SearchName);`
 
 ### WikiDataLib.GetWikiPerson Method
+
+Get information of specific person.
+
+<b>Remark:</b> This is anync method.
 
 `public async static Task<WikiPerson> GetWikiPerson(int id)`
 
