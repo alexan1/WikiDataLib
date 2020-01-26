@@ -9,7 +9,7 @@ namespace WikiTest
         [TestMethod]
         public void WikiSearch1()
         {
-            var people = WikiData.WikiSearch("Pope");
+            var people = WikiData.WikiPeopleSearch("Pope");
             Assert.AreNotEqual(0, people.Result.Count);
         }
 

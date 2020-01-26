@@ -9,7 +9,7 @@ namespace WikiDataLib
 {
     public static class WikiData
     {
-        public async static Task<Collection<WikiPerson>> WikiSearch(string searchString)
+        public async static Task<Collection<WikiPerson>> WikiPeopleSearch(string searchString)
         {
             var urlBase = "https://query.wikidata.org/sparql";
             var query = "SELECT distinct (SAMPLE(?image)as ?image) ?item ?itemLabel ?itemDescription" +
@@ -28,8 +28,7 @@ namespace WikiDataLib
             var root = doc.RootElement;
             var entities = root.GetProperty("results").GetProperty("bindings");
 
-            var FoundPersons = new Collection<WikiPerson>();                      
-            //var count = entities.Count();
+            var FoundPersons = new Collection<WikiPerson>();               
            
             foreach (var item in entities.EnumerateArray())
             {
