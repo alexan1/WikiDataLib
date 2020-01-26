@@ -6,5 +6,5 @@ Right now it has only two methods for get ino about persons, who has Wiki pages.
 
 Namespace: WikiDataLib
 
-# WikiDataLib.WikiSearch Method
+### WikiDataLib.WikiSearch Method
 
