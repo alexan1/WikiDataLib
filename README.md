@@ -17,7 +17,7 @@ Get collection of people with specific name.
 <b>sample:</b> 
 `People = await WikiData.WikiSearch(SearchName);`
 
-<b>parameter:<b> string: name of person to looking for.
+<b>parameter:</b> string: name of person to looking for.
 
 ### WikiDataLib.GetWikiPerson Method
 
@@ -30,7 +30,7 @@ Get information of specific person.
 <b>sample:</b> 
 `People = await WikiData.WikiSearch(SearchName);`
 
-<b>parameter:<b> int: id of specific person.
+<b>parameter:</b> int: id of specific person.
 
 ### WikiPerson Class
 
