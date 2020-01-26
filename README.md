@@ -2,7 +2,7 @@
 
 This is .NET Standard 2.0 library for access WikiData from your application.
 
-Right now it has only two methods for get ino about persons, who has Wiki pages.
+Right now it has only two methods for get people info from WikiPedia.
 
 Namespace: WikiDataLib
 
@@ -10,22 +10,29 @@ Namespace: WikiDataLib
 
 Get collection of people with specific name.
 
-<b>Remark:</b> This is anync method.
+<b>remark:</b> This is anync method.
 
 `public async static Task<Collection<WikiPerson>> WikiSearch(string searchString)`
 
-<b>Sample:</b> 
+<b>sample:</b> 
 `People = await WikiData.WikiSearch(SearchName);`
+
+<b>parameter:<b> string: name of person to looking for.
 
 ### WikiDataLib.GetWikiPerson Method
 
 Get information of specific person.
 
-<b>Remark:</b> This is anync method.
+<b>remark:</b> This is anync method.
 
 `public async static Task<WikiPerson> GetWikiPerson(int id)`
 
-where
+<b>sample:</b> 
+`People = await WikiData.WikiSearch(SearchName);`
+
+<b>parameter:<b> int: id of specific person.
+
+### WikiPerson Class
 
 ```
     public class WikiPerson
@@ -44,5 +51,4 @@ where
     }
 ```
 
-<b>Sample:</b> 
-`People = await WikiData.WikiSearch(SearchName);`
+
