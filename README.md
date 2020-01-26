@@ -51,4 +51,4 @@ Get information of specific person.
     }
 ```
 
-
+    You can use this library by installing nuget [WikiDataiLib](https://www.nuget.org/packages/WikiDataiLib/).
