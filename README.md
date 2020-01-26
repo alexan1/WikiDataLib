@@ -8,3 +8,10 @@ Namespace: WikiDataLib
 
 ### WikiDataLib.WikiSearch Method
 
+Get collection of people with specific name.
+
+Remark: This is anync method.
+
+### WikiSearch(String)
+
+<code>public async static Task<WikiPerson> GetWikiPerson(int id)<code>
