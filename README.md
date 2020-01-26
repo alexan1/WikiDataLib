@@ -14,6 +14,10 @@ Get collection of people with specific name.
 
 ### WikiSearch(String)
 
+`People = await WikiData.WikiSearch(SearchName);`
+
+### WikiDataLib.GetWikiPerson Method
+
 `public async static Task<WikiPerson> GetWikiPerson(int id)`
 
 where
