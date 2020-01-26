@@ -31,7 +31,6 @@ where
         [DisplayFormat(DataFormatString = "{0:yyyy}")]
         public DateTime? Death { get; set; }
         public string Image { get; set; }
-        public string Link { get; set; }
-        //public decimal Rating { get; set; }
+        public string Link { get; set; }       
     }
 ```
