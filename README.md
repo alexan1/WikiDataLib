@@ -30,7 +30,7 @@ Get information of specific person.
 <b>sample:</b> 
 `People = await WikiData.WikiSearch(SearchName);`
 
-<b>parameter:</b> int: id of specific person (without first <b>Q<b/>).
+<b>parameter:</b> int: id of specific person (without first <b>Q</b>).
 
 ### WikiPerson Class
 
