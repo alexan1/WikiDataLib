@@ -35,4 +35,5 @@ where
     }
 ```
 
-<b>Sample:</b> `People = await WikiData.WikiSearch(SearchName);`
+<b>Sample:</b> 
+`People = await WikiData.WikiSearch(SearchName);`
