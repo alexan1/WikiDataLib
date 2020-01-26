@@ -14,4 +14,4 @@ Remark: This is anync method.
 
 ### WikiSearch(String)
 
-<code>public async static Task<WikiPerson> GetWikiPerson(int id)<code>
+`public async static Task<WikiPerson> GetWikiPerson(int id)`
