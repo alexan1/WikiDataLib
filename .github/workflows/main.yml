@@ -19,7 +19,7 @@ jobs:
         - name: Sleep for 5 seconds
           uses: jakejarvis/wait-action@master
           with:
-            time: '5s'  
+            time: '15s'  
     deploy:
       needs: build
       runs-on: ubuntu-latest
