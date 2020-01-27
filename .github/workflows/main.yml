@@ -1,27 +1,29 @@
 name: publish to nuget
-on:
-  push:
-    branches:
-      - master # Your default release branch
+on: 
+    push:
+        branches: 
+        - master
 jobs:
-  publish:
-    name: publish to nuget
-    runs-on: ubuntu-latest
-    steps:
-      # Checkout
-      - uses: actions/checkout@v2
-
-      # Optional step, add only for a specific dotnet version that doesn't come with ubuntu-latest / windows-latest
-      # Visit bit.ly/2synnZl for a list of software that comes pre-installed with ubuntu-latest / windows-latest
-      # - name: Setup dotnet
-      #   uses: actions/setup-dotnet@v1
-      #   with:
-      #     dotnet-version: 3.1.100
-      
-      # Publish
-      - name: Publish if version is updated
-        uses: rohith/publish-nuget@v1
-        # with: # All inputs are optional (details given below)
-        #   project_dir: src # Defaults to repository root
-        #   tag_format: v* # [*] gets replaced with version
-        #   nuget_key: ${{secrets.NUGET_API_KEY}} # nuget.org API key
+    build:
+        runs-on: ubuntu-latest    
+        steps:
+        - uses: actions/checkout@v1
+        - name: Setup .NET Core
+          uses: actions/setup-dotnet@v1
+          with:
+            dotnet-version: 3.1.100
+        - name: Build with dotnet
+          run: dotnet build --configuration Release
+        - name: Test with dotnet
+          run: dotnet test
+    deploy:
+      needs: build
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v1
+        - name: Pack nuget Package
+          run: dotnet pack --configuration Release
+        - name: Pushpackage to nuget
+          run: dotnet nuget push **/*.nupkg
+                --api-key ${{ secrets.NUGET_API_KEY }}
+                 --source https://api.nuget.org/v3/index.json         
