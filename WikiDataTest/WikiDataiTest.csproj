@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\WikiDataLib\WikiDataiLib.csproj" />
+    <ProjectReference Include="..\WikiDataLib\WikiDataLib.csproj" />
   </ItemGroup>
 
 </Project>
