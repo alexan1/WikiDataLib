@@ -16,10 +16,10 @@ jobs:
           run: dotnet build --configuration Release
         - name: Test with dotnet
           run: dotnet test
-        - name: Sleep for 30 seconds
+        - name: Sleep for 5 seconds
           uses: jakejarvis/wait-action@master
           with:
-            time: '10s'  
+            time: '5s'  
     deploy:
       needs: build
       runs-on: ubuntu-latest
