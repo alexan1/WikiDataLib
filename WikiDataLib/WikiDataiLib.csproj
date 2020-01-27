@@ -12,6 +12,8 @@
     <RepositoryUrl>https://github.com/alexan1/WikiDataLib</RepositoryUrl>
     <PackageTags>WikiData</PackageTags>
     <NeutralLanguage>en-US</NeutralLanguage>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
