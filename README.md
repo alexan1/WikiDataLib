@@ -6,16 +6,16 @@ Right now it has only two methods for get people info from WikiPedia.
 
 Namespace: WikiDataLib
 
-### WikiDataLib.WikiSearch Method
+### WikiDataLib.WikiPeopleSearch Method
 
 Get collection of people with specific name.
 
 <b>remark:</b> This is anync method.
 
-`public async static Task<Collection<WikiPerson>> WikiSearch(string searchString)`
+`public async static Task<Collection<WikiPerson>> WikiPeopleSearch(string searchString)`
 
 <b>sample:</b> 
-`People = await WikiData.WikiSearch(SearchName);`
+`People = await WikiData.WikiPeopleSearch(SearchName);`
 
 <b>parameter:</b> string: name of person to looking for.
 
@@ -30,7 +30,7 @@ Get information of specific person.
 <b>sample:</b> 
 `People = await WikiData.WikiSearch(SearchName);`
 
-<b>parameter:</b> int: id of specific person (without first <b>Q<b/>).
+<b>parameter:</b> int: id of specific person (without first <b>Q</b>).
 
 ### WikiPerson Class
 
@@ -50,5 +50,4 @@ Get information of specific person.
         public string Link { get; set; }       
     }
 ```
-
-
+You can use this library by installing nuget [WikiDataiLib](https://www.nuget.org/packages/WikiDataiLib/). 
