@@ -12,10 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       
-      - name: Setup dotnet
-        uses: actions/setup-dotnet@v1
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v2
         with:
-          dotnet-version: '5.0.x' # Specify your desired .NET SDK version
+          dotnet-version: '6.0.x' # Specify the .NET 6.0 SDK version
 
       - name: Build with dotnet
         run: dotnet build --configuration Release
@@ -34,4 +34,4 @@ jobs:
           # VERSION_REGEX: <Version>(.*)<\/Version> # Regex pattern to extract version info in a capturing group
           # TAG_COMMIT: true # Flag to enable / disable git tagging
           # TAG_FORMAT: v* # Format of the git tag, [*] gets replaced with version
-          NUGET_KEY: ${{secrets.NUGET_API_KEY}} # nuget.org API key
+          NUGET_KEY: ${{ secrets.NUGET_API_KEY }} # nuget.org API key
