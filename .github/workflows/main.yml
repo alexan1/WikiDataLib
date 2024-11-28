@@ -29,6 +29,9 @@ jobs:
       - name: List directory before push
         run: ls -al
 
+      - name: Introduce delay
+        run: sleep 10
+
       - name: Publish on version change
         uses: rohith/publish-nuget@v2
         with:
