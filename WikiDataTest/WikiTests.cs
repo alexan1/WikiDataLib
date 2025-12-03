@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using WikiDataLib;
+using System.Threading.Tasks;
 
 namespace WikiTest
 {
@@ -7,16 +8,16 @@ namespace WikiTest
     public class WikiTests
     {
         [TestMethod]
-        public void WikiSearch1()
+        public async Task WikiSearch1()
         {
-            var people = WikiData.WikiPeopleSearch("Pope");
-            Assert.AreNotEqual(0, people.Result.Count);
+            var people = await WikiData.WikiPeopleSearch("Pope");
+            Assert.AreNotEqual(0, people.Count);
         }
 
         [TestMethod]
-        public void GetPerson1()
+        public async Task GetPerson1()
         {
-            var person = WikiData.GetWikiPerson(303).Result;
+            var person = await WikiData.GetWikiPerson(303);
 
             Assert.IsNotNull(person);
 
