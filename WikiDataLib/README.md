@@ -1,32 +1,40 @@
+# WikiDataLib
+
 This is .NET Standard 2.0 library for access WikiData from your application.
 
 Right now it has only two methods for get people info from WikiPedia.
 
 Namespace: WikiDataLib
 
-WikiDataLib.WikiPeopleSearch Method
+### WikiDataLib.WikiPeopleSearch Method
+
 Get collection of people with specific name.
 
-remark: This is anync method.
+<b>remark:</b> This is anync method.
 
-public async static Task<Collection<WikiPerson>> WikiPeopleSearch(string searchString)
+`public async static Task<Collection<WikiPerson>> WikiPeopleSearch(string searchString)`
 
-sample: People = await WikiData.WikiPeopleSearch(SearchName);
+<b>sample:</b> 
+`People = await WikiData.WikiPeopleSearch(SearchName);`
 
-parameter: string: name of person to looking for.
+<b>parameter:</b> string: name of person to looking for.
 
-WikiDataLib.GetWikiPerson Method
+### WikiDataLib.GetWikiPerson Method
+
 Get information of specific person.
 
-remark: This is anync method.
+<b>remark:</b> This is anync method.
 
-public async static Task<WikiPerson> GetWikiPerson(int id)
+`public async static Task<WikiPerson> GetWikiPerson(int id)`
 
-sample: People = await WikiData.WikiSearch(SearchName);
+<b>sample:</b> 
+`People = await WikiData.WikiSearch(SearchName);`
 
-parameter: int: id of specific person (without first Q).
+<b>parameter:</b> int: id of specific person (without first <b>Q</b>).
 
-WikiPerson Class
+### WikiPerson Class
+
+```
     public class WikiPerson
     {
         public int Id { get; set; }
@@ -41,3 +49,5 @@ WikiPerson Class
         public string Image { get; set; }
         public string Link { get; set; }       
     }
+```
+You can use this library by installing nuget [WikiDataiLib](https://www.nuget.org/packages/WikiDataiLib/). 
