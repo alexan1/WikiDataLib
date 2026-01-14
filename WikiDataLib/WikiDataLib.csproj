@@ -15,8 +15,8 @@
     <NeutralLanguage>en-US</NeutralLanguage>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <Version>1.0.8</Version>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Version>1.0.9</Version>
+    <PackageReadmeFile>..\README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
