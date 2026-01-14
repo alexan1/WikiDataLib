@@ -15,7 +15,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v2
         with:
-          dotnet-version: '6.0.x' # Specify the .NET 6.0 SDK version
+          dotnet-version: '10.0.x' # Specify the .NET 10.0 SDK version
 
       - name: Build with dotnet
         run: dotnet build --configuration Release
