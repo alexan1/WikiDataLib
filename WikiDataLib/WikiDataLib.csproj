@@ -29,10 +29,7 @@
       <Pack>True</Pack>
       <PackagePath></PackagePath>
     </None>
-    <None Include="README.md" Pack="true" PackagePath="\" />
-      <Pack>True</Pack>
-      <PackagePath>README.md</PackagePath>
-    </None>
+    <None Include="README.md" Pack="true" PackagePath="\" />    
   </ItemGroup>
 
 </Project>
