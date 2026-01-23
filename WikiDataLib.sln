@@ -1,11 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29721.120
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11415.281 d18.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WikiDataLib", "WikiDataLib\WikiDataLib.csproj", "{424B57D6-4679-44CB-A7F1-C27E3E55BDEC}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WikiDataiTest", "WikiDataTest\WikiDataiTest.csproj", "{6430D911-707B-40A5-AC3F-249EAEAC05E3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WikiDataTest", "WikiDataTest\WikiDataTest.csproj", "{6430D911-707B-40A5-AC3F-249EAEAC05E3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
