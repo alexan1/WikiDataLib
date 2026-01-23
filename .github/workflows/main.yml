@@ -22,10 +22,15 @@ jobs:
         run: dotnet restore
 
       - name: Build (Release)
-        run: dotnet build ./WikiDataLib/WikiDataLib.csproj -c Release --no-restore
+        run: dotnet build ./WikiDataLib/WikiDataLib.csproj ./WikiDataTest/WikiDataTest.csproj -c Release --no-restore
+
+      - name: Diagnostics
+        run: |
+          dotnet --info
+          dotnet list ./WikiDataTest/WikiDataTest.csproj package --include-transitive || true
 
       - name: Test
-        run: dotnet test -c Release --no-build
+        run: dotnet test ./WikiDataTest/WikiDataTest.csproj -c Release
 
       - name: Pack (Release)
         run: dotnet pack ./WikiDataLib/WikiDataLib.csproj -c Release --no-build -o ./artifacts
