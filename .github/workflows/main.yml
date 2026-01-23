@@ -22,7 +22,9 @@ jobs:
         run: dotnet restore
 
       - name: Build (Release)
-        run: |\n          dotnet build ./WikiDataLib/WikiDataLib.csproj -c Release --no-restore\n          dotnet build ./WikiDataTest/WikiDataTest.csproj -c Release --no-restore
+        run: |
+          dotnet build ./WikiDataLib/WikiDataLib.csproj -c Release --no-restore
+          dotnet build ./WikiDataTest/WikiDataTest.csproj -c Release --no-restore
 
       - name: Diagnostics
         run: |
@@ -46,3 +48,5 @@ jobs:
 
       - name: Push to NuGet
         run: dotnet nuget push "./artifacts/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+
