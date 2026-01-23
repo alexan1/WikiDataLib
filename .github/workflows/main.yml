@@ -22,7 +22,7 @@ jobs:
         run: dotnet restore
 
       - name: Build (Release)
-        run: dotnet build ./WikiDataLib/WikiDataLib.csproj ./WikiDataTest/WikiDataTest.csproj -c Release --no-restore
+        run: |\n          dotnet build ./WikiDataLib/WikiDataLib.csproj -c Release --no-restore\n          dotnet build ./WikiDataTest/WikiDataTest.csproj -c Release --no-restore
 
       - name: Diagnostics
         run: |
