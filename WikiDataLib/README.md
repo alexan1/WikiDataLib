@@ -1,53 +1,51 @@
 # WikiDataLib
 
-This is .NET Standard 2.0 library for access WikiData from your application.
+Consumer-focused README for the NuGet package.
 
-Right now it has only two methods for get people info from WikiPedia.
+This library provides simple access to WikiData (search people and fetch person details).
+Targets: .NET Standard 2.0 and .NET 10.
 
-Namespace: WikiDataLib
-
-### WikiDataLib.WikiPeopleSearch Method
-
-Get collection of people with specific name.
-
-<b>remark:</b> This is anync method.
-
-`public async static Task<Collection<WikiPerson>> WikiPeopleSearch(string searchString)`
-
-<b>sample:</b> 
-`People = await WikiData.WikiPeopleSearch(SearchName);`
-
-<b>parameter:</b> string: name of person to looking for.
-
-### WikiDataLib.GetWikiPerson Method
-
-Get information of specific person.
-
-<b>remark:</b> This is anync method.
-
-`public async static Task<WikiPerson> GetWikiPerson(int id)`
-
-<b>sample:</b> 
-`People = await WikiData.WikiSearch(SearchName);`
-
-<b>parameter:</b> int: id of specific person (without first <b>Q</b>).
-
-### WikiPerson Class
-
+Install
 ```
-    public class WikiPerson
-    {
-        public int Id { get; set; }
-        public string Name { get; set; }
-        public string Description { get; set; }
-        [DataType(DataType.Date)]
-        [DisplayFormat(DataFormatString = "{0:yyyy}")]
-        public DateTime? Birthday { get; set; }
-        [DataType(DataType.Date)]
-        [DisplayFormat(DataFormatString = "{0:yyyy}")]
-        public DateTime? Death { get; set; }
-        public string Image { get; set; }
-        public string Link { get; set; }       
-    }
+dotnet add package WikiDataLib
 ```
-You can use this library by installing nuget [WikiDataiLib](https://www.nuget.org/packages/WikiDataiLib/). 
+
+Quick usage
+```csharp
+using WikiDataLib;
+
+// search people by name
+var people = await WikiData.WikiPeopleSearch("Ada Lovelace");
+
+// get a person by id (numeric part of Q)
+var person = await WikiData.GetWikiPerson(239);
+```
+
+API (signatures)
+```csharp
+public static Task<Collection<WikiPerson>> WikiPeopleSearch(string searchString)
+
+public static Task<WikiPerson> GetWikiPerson(int id)
+```
+
+WikiPerson
+```csharp
+public class WikiPerson
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public string Description { get; set; }
+    public DateTime? Birthday { get; set; }
+    public DateTime? Death { get; set; }
+    public string Image { get; set; }
+    public string Link { get; set; }
+}
+```
+
+Notes
+- Method names and samples use `async/await`.
+- The package README is the project README (`WikiDataLib/README.md`) and is included in the nupkg.
+
+Repository and license
+- Source: https://github.com/alexan1/WikiDataLib
+- License: see `LICENSE` in the package
