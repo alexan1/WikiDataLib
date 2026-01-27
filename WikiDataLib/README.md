@@ -1,7 +1,5 @@
 # WikiDataLib
 
-Consumer-focused README for the NuGet package.
-
 This library provides simple access to WikiData (search people and fetch person details).
 Targets: .NET Standard 2.0 and .NET 10.
 
@@ -42,10 +40,5 @@ public class WikiPerson
 }
 ```
 
-Notes
-- Method names and samples use `async/await`.
-- The package README is the project README (`WikiDataLib/README.md`) and is included in the nupkg.
-
-Repository and license
+Repository:
 - Source: https://github.com/alexan1/WikiDataLib
-- License: see `LICENSE` in the package

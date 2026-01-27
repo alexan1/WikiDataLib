@@ -4,19 +4,19 @@
     <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
     <LangVersion>7.3</LangVersion>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <Authors>Alexandre Konioukhov</Authors>
     <Company>9386-2399 Québec inc.</Company>
     <Copyright>Copyright (c) 2020 Alexandre Konioukhov</Copyright>
     <Description>Library for WikiData access</Description>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/alexan1/WikiDataLib</RepositoryUrl>
     <PackageTags>WikiData</PackageTags>
     <NeutralLanguage>en-US</NeutralLanguage>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Version>1.1.2</Version>
+    <Version>1.1.3</Version>
   </PropertyGroup>
 
   <ItemGroup>
