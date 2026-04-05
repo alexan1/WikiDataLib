@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Threading;
@@ -16,6 +17,7 @@ namespace WikiDataLib
         private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36";
         private const string WikiDataEntityUrlPrefix = "http://www.wikidata.org/entity/Q";
         private const int WikiDataEntityPrefixLength = 32;
+        private const int MaxRetryAttempts = 3;
 
         // SPARQL query field names
         private const string FieldItem = "item";
@@ -26,12 +28,14 @@ namespace WikiDataLib
         private const string FieldImage = "image";
         private const string FieldArticle = "article";
 
-        private const int MaxRetryAttempts = 3;
-
         private static readonly HttpClient _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(30)
         };
+
+        // In-memory cache keyed by SPARQL query string
+        private static readonly ConcurrentDictionary<string, JsonElement> _cache =
+            new ConcurrentDictionary<string, JsonElement>();
 
         static WikiData()
         {
@@ -158,7 +162,12 @@ namespace WikiDataLib
         {
             var url = $"{WikiDataSparqlEndpoint}?query={Uri.EscapeDataString(query)}&format=json";
 
-            HttpRequestException? lastException = null;
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (_cache.TryGetValue(url, out var cached))
+            {
+                return cached;
+            }
 
             for (int attempt = 1; attempt <= MaxRetryAttempts; attempt++)
             {
@@ -166,21 +175,46 @@ namespace WikiDataLib
                 {
                     using (var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false))
                     {
-                        response.EnsureSuccessStatusCode();
+                        // Only retry transient server errors (429, 5xx); fail fast on 4xx
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            var code = (int)response.StatusCode;
+                            bool isTransient = code == 429 || code >= 500;
+                            if (!isTransient || attempt >= MaxRetryAttempts)
+                            {
+                                response.EnsureSuccessStatusCode();
+                            }
+                            var delay = code == 429
+                                ? TimeSpan.FromSeconds(Math.Pow(2, attempt + 1))
+                                : TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                            continue;
+                        }
+
                         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        var doc = JsonDocument.Parse(json);
-                        return doc.RootElement;
+                        using (var doc = JsonDocument.Parse(json))
+                        {
+                            var result = doc.RootElement.Clone();
+                            _cache.TryAdd(url, result);
+                            return result;
+                        }
                     }
                 }
-                catch (HttpRequestException ex) when (attempt < MaxRetryAttempts)
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    lastException = ex;
-                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // 2s, 4s
-                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                    // User-requested cancellation — do not retry
+                    throw;
+                }
+                catch (Exception ex) when (attempt < MaxRetryAttempts &&
+                    (ex is HttpRequestException || ex is OperationCanceledException || ex is TaskCanceledException))
+                {
+                    // Transient network error or timeout — retry with backoff
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), cancellationToken).ConfigureAwait(false);
                 }
             }
 
-            throw lastException!;
+            // Unreachable: loop always returns or throws before exhaustion
+            throw new InvalidOperationException("Retry loop exhausted unexpectedly.");
         }
 
         private static bool TryGetBindings(JsonElement root, out JsonElement bindings)
