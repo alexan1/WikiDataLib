@@ -1,53 +1,66 @@
 # WikiDataLib
 
-This is .NET Standard 2.0 library for access WikiData from your application.
+A .NET library for accessing WikiData from your application. Targets `netstandard2.0` and `net10.0`.
 
-Right now it has only two methods for get people info from WikiPedia.
+Namespace: `WikiDataLib`
 
-Namespace: WikiDataLib
-
-### WikiDataLib.WikiPeopleSearch Method
-
-Get collection of people with specific name.
-
-<b>remark:</b> This is anync method.
-
-`public async static Task<Collection<WikiPerson>> WikiPeopleSearch(string searchString)`
-
-<b>sample:</b> 
-`People = await WikiData.WikiPeopleSearch(SearchName);`
-
-<b>parameter:</b> string: name of person to looking for.
-
-### WikiDataLib.GetWikiPerson Method
-
-Get information of specific person.
-
-<b>remark:</b> This is anync method.
-
-`public async static Task<WikiPerson> GetWikiPerson(int id)`
-
-<b>sample:</b> 
-`People = await WikiData.WikiSearch(SearchName);`
-
-<b>parameter:</b> int: id of specific person (without first <b>Q</b>).
-
-### WikiPerson Class
+## Installation
 
 ```
-    public class WikiPerson
-    {
-        public int Id { get; set; }
-        public string Name { get; set; }
-        public string Description { get; set; }
-        [DataType(DataType.Date)]
-        [DisplayFormat(DataFormatString = "{0:yyyy}")]
-        public DateTime? Birthday { get; set; }
-        [DataType(DataType.Date)]
-        [DisplayFormat(DataFormatString = "{0:yyyy}")]
-        public DateTime? Death { get; set; }
-        public string Image { get; set; }
-        public string Link { get; set; }       
-    }
+dotnet add package WikiDataLib
 ```
-You can use this library by installing nuget [WikiDataiLib](https://www.nuget.org/packages/WikiDataiLib/). 
+
+## Methods
+
+### `WikiData.WikiPeopleSearchAsync`
+
+Search for people in WikiData by name. Returns a collection of matching people.
+
+```csharp
+public static async Task<Collection<WikiPerson>> WikiPeopleSearchAsync(
+    string searchString,
+    CancellationToken cancellationToken = default)
+```
+
+**Example:**
+```csharp
+var people = await WikiData.WikiPeopleSearchAsync("Ada");
+```
+
+**Parameters:**
+- `searchString` — name to search for (throws `ArgumentException` if null or whitespace)
+- `cancellationToken` — optional cancellation token
+
+### `WikiData.GetWikiPersonAsync`
+
+Get information about a specific person by their WikiData numeric ID (the number after `Q`).
+
+```csharp
+public static async Task<WikiPerson> GetWikiPersonAsync(
+    int id,
+    CancellationToken cancellationToken = default)
+```
+
+**Example:**
+```csharp
+var person = await WikiData.GetWikiPersonAsync(303); // Q303 = Elvis Presley
+```
+
+**Parameters:**
+- `id` — numeric WikiData entity ID, e.g. `303` for `Q303` (throws `ArgumentOutOfRangeException` if ≤ 0)
+- `cancellationToken` — optional cancellation token
+
+## WikiPerson Class
+
+```csharp
+public class WikiPerson
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public DateTime? Birthday { get; set; }
+    public DateTime? Death { get; set; }
+    public string? Image { get; set; }   // URL to image
+    public string? Link { get; set; }    // English Wikipedia URL
+}
+```
