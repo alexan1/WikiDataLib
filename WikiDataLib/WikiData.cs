@@ -26,6 +26,8 @@ namespace WikiDataLib
         private const string FieldImage = "image";
         private const string FieldArticle = "article";
 
+        private const int MaxRetryAttempts = 3;
+
         private static readonly HttpClient _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(30)
@@ -156,13 +158,29 @@ namespace WikiDataLib
         {
             var url = $"{WikiDataSparqlEndpoint}?query={Uri.EscapeDataString(query)}&format=json";
 
-            using (var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false))
+            HttpRequestException? lastException = null;
+
+            for (int attempt = 1; attempt <= MaxRetryAttempts; attempt++)
             {
-                response.EnsureSuccessStatusCode();
-                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                var doc = JsonDocument.Parse(json);
-                return doc.RootElement;
+                try
+                {
+                    using (var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        var doc = JsonDocument.Parse(json);
+                        return doc.RootElement;
+                    }
+                }
+                catch (HttpRequestException ex) when (attempt < MaxRetryAttempts)
+                {
+                    lastException = ex;
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // 2s, 4s
+                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                }
             }
+
+            throw lastException!;
         }
 
         private static bool TryGetBindings(JsonElement root, out JsonElement bindings)
