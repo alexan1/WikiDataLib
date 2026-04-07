@@ -1,5 +1,7 @@
 # WikiDataLib
 
+[![NuGet](https://img.shields.io/nuget/v/WikiDataLib.svg)](https://www.nuget.org/packages/WikiDataLib/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A .NET library for accessing WikiData from your application. Targets `netstandard2.0` and `net10.0`.
 
 Namespace: `WikiDataLib`
