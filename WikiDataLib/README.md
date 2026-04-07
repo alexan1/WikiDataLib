@@ -267,7 +267,7 @@ foreach (var id in ids)
 
 ## Dependencies
 
-- `System.Text.Json` (10.0.0)
+- `System.Text.Json` (8.0.5 for netstandard2.0; built-in for net10.0)
 - `System.ComponentModel.Annotations` (5.0.0)
 
 ## Contributing
@@ -286,7 +286,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.1.4 (Current)
+### v1.1.5 (Current)
+- Fixed `System.Text.Json` version compatibility (`netstandard2.0` uses v8.0.5; `net10.0` uses built-in)
+- Added exponential backoff retry logic (3 attempts) for transient WikiData SPARQL endpoint failures
+
+### v1.1.4
 - **BREAKING**: Renamed methods with `Async` suffix
 - **BREAKING**: String properties now nullable
 - Added cancellation token support
