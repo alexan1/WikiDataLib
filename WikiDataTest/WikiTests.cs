@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using WikiDataLib;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -159,6 +160,24 @@ namespace WikiTest
             // Verify first result has a name
             var firstPerson = people[0];
             Assert.IsNotNull(firstPerson.Name, "First result should have a name");
+        }
+
+        [TestMethod]
+        public async Task WhenSearchingByPartialSurname_ShouldIncludeElvisPresley()
+        {
+            var people = await WikiData.WikiPeopleSearchAsync("Presley");
+
+            Assert.IsTrue(people.Any(person => person.Name == "Elvis Presley"),
+                "Search for 'Presley' should include Elvis Presley");
+        }
+
+        [TestMethod]
+        public async Task WhenSearchingWithWildcard_ShouldIncludeElvisPresley()
+        {
+            var people = await WikiData.WikiPeopleSearchAsync("*Presley*");
+
+            Assert.IsTrue(people.Any(person => person.Name == "Elvis Presley"),
+                "Search for '*Presley*' should include Elvis Presley");
         }
 
         [TestMethod]

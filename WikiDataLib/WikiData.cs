@@ -1,10 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace WikiDataLib
 {
@@ -58,11 +60,17 @@ namespace WikiDataLib
                 throw new ArgumentException("Search string cannot be null or empty.", nameof(searchString));
             }
 
-            var encodedSearchString = Uri.EscapeDataString(searchString);
-            var query = BuildSearchQuery(encodedSearchString);
+            var searchPattern = BuildSearchPattern(searchString);
 
             try
             {
+                var entityIds = await SearchEntityIdsAsync(searchString, cancellationToken).ConfigureAwait(false);
+                if (entityIds.Count == 0)
+                {
+                    return new Collection<WikiPerson>();
+                }
+
+                var query = BuildSearchQuery(entityIds);
                 var root = await ExecuteSparqlQueryAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (!TryGetBindings(root, out var bindings))
@@ -70,15 +78,18 @@ namespace WikiDataLib
                     return new Collection<WikiPerson>();
                 }
 
-                var foundPersons = new Collection<WikiPerson>();
+                var idOrder = entityIds
+                    .Select((id, index) => new { id, index })
+                    .ToDictionary(item => item.id, item => item.index);
 
-                foreach (var item in bindings.EnumerateArray())
-                {
-                    var person = GetPersonFromJsonElement(item);
-                    foundPersons.Add(person);
-                }
+                var foundPersons = bindings
+                    .EnumerateArray()
+                    .Select(GetPersonFromJsonElement)
+                    .Where(person => person.Name != null && Regex.IsMatch(person.Name, searchPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                    .OrderBy(person => idOrder.TryGetValue(person.Id, out var index) ? index : int.MaxValue)
+                    .ToList();
 
-                return foundPersons;
+                return new Collection<WikiPerson>(foundPersons);
             }
             catch (HttpRequestException ex)
             {
@@ -88,6 +99,41 @@ namespace WikiDataLib
             {
                 throw new JsonException("Failed to parse WikiData response.", ex);
             }
+        }
+
+        private static async Task<Collection<int>> SearchEntityIdsAsync(string searchString, CancellationToken cancellationToken)
+        {
+            var url = $"https://www.wikidata.org/w/api.php?action=query&list=search&srsearch={Uri.EscapeDataString(searchString)}&format=json&srlimit=50";
+            var root = await ExecuteJsonRequestAsync(url, cancellationToken).ConfigureAwait(false);
+
+            var entityIds = new Collection<int>();
+
+            if (!root.TryGetProperty("query", out var queryElement) ||
+                !queryElement.TryGetProperty("search", out var searchResults))
+            {
+                return entityIds;
+            }
+
+            foreach (var item in searchResults.EnumerateArray())
+            {
+                if (!item.TryGetProperty("title", out var titleProperty))
+                {
+                    continue;
+                }
+
+                var title = titleProperty.GetString();
+                if (title == null || title.Length <= 1 || title[0] != 'Q')
+                {
+                    continue;
+                }
+
+                if (int.TryParse(title.Substring(1), out var entityId))
+                {
+                    entityIds.Add(entityId);
+                }
+            }
+
+            return entityIds;
         }
 
         /// <summary>
@@ -133,16 +179,25 @@ namespace WikiDataLib
             }
         }
 
-        private static string BuildSearchQuery(string encodedSearchString)
+        private static string BuildSearchQuery(Collection<int> entityIds)
         {
+            var itemValues = string.Join(" ", entityIds.Select(id => $"wd:Q{id}"));
+
             return "SELECT distinct (SAMPLE(?image)as ?image) ?item ?itemLabel ?itemDescription" +
                 " (SAMPLE(?DR) as ?DR)(SAMPLE(?RIP) as ?RIP)(SAMPLE(?article) as ?article) " +
-                "WHERE {?item wdt:P31 wd:Q5. ?item ?label '" + encodedSearchString + "'@en. OPTIONAL{?item wdt:P569 ?DR .}" +
+                "WHERE {VALUES ?item { " + itemValues + " } ?item wdt:P31 wd:Q5. OPTIONAL{?item wdt:P569 ?DR .}" +
                 " ?article schema:about ?item . ?article schema:inLanguage 'en'. ?article schema:isPartOf <https://en.wikipedia.org/>. " +
                 "OPTIONAL{?item wdt:P570 ?RIP .} " +
                 "OPTIONAL{?item wdt:P18 ?image .} " +
                 "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en'. }} " +
-                "GROUP BY ?item ?itemLabel ?itemDescription";
+                "GROUP BY ?item ?itemLabel ?itemDescription LIMIT 50";
+        }
+
+        private static string BuildSearchPattern(string searchString)
+        {
+            return Regex.Escape(searchString)
+                .Replace(@"\*", ".*")
+                .Replace(@"\?", ".");
         }
 
         private static string BuildPersonByIdQuery(int id)
@@ -161,6 +216,12 @@ namespace WikiDataLib
         private static async Task<JsonElement> ExecuteSparqlQueryAsync(string query, CancellationToken cancellationToken)
         {
             var url = $"{WikiDataSparqlEndpoint}?query={Uri.EscapeDataString(query)}&format=json";
+
+            return await ExecuteJsonRequestAsync(url, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static async Task<JsonElement> ExecuteJsonRequestAsync(string url, CancellationToken cancellationToken)
+        {
 
             cancellationToken.ThrowIfCancellationRequested();
 

@@ -16,7 +16,7 @@ dotnet add package WikiDataLib
 
 ### `WikiData.WikiPeopleSearchAsync`
 
-Search for people in WikiData by name. Returns a collection of matching people.
+Search for people in WikiData by name. Returns a collection of matching people. The search is case-insensitive, supports partial matches, and accepts `*` and `?` wildcard patterns.
 
 ```csharp
 public static async Task<Collection<WikiPerson>> WikiPeopleSearchAsync(
@@ -29,8 +29,12 @@ public static async Task<Collection<WikiPerson>> WikiPeopleSearchAsync(
 var people = await WikiData.WikiPeopleSearchAsync("Ada");
 ```
 
+```csharp
+var people = await WikiData.WikiPeopleSearchAsync("*Presley*");
+```
+
 **Parameters:**
-- `searchString` — name to search for (throws `ArgumentException` if null or whitespace)
+- `searchString` — name or wildcard pattern to search for (throws `ArgumentException` if null or whitespace)
 - `cancellationToken` — optional cancellation token
 
 ### `WikiData.GetWikiPersonAsync`
