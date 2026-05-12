@@ -181,6 +181,16 @@ namespace WikiTest
         }
 
         [TestMethod]
+        public async Task WhenSearchingForPope_AllResultsShouldContainPopeInItemLabel()
+        {
+            var people = await WikiData.WikiPeopleSearchAsync("Pope");
+
+            Assert.IsTrue(people.Count > 0, "Search for 'Pope' should return results");
+            Assert.IsTrue(people.All(person => person.Name != null && person.Name.Contains("Pope", StringComparison.OrdinalIgnoreCase)),
+                "Search for 'Pope' should only return item labels containing 'Pope'");
+        }
+
+        [TestMethod]
         public async Task WhenGettingPersonById_ShouldHaveValidId()
         {
             var person = await WikiData.GetWikiPersonAsync(303);
