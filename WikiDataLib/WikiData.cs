@@ -70,7 +70,7 @@ namespace WikiDataLib
                     return new Collection<WikiPerson>();
                 }
 
-                var query = BuildSearchQuery(entityIds);
+                var query = BuildSearchQuery(entityIds, searchPattern);
                 var root = await ExecuteSparqlQueryAsync(query, cancellationToken).ConfigureAwait(false);
 
                 if (!TryGetBindings(root, out var bindings))
@@ -179,13 +179,16 @@ namespace WikiDataLib
             }
         }
 
-        private static string BuildSearchQuery(Collection<int> entityIds)
+        private static string BuildSearchQuery(Collection<int> entityIds, string searchPattern)
         {
             var itemValues = string.Join(" ", entityIds.Select(id => $"wd:Q{id}"));
+            var escapedSearchPattern = EscapeSparqlStringLiteral(searchPattern);
 
             return "SELECT distinct (SAMPLE(?image)as ?image) ?item ?itemLabel ?itemDescription" +
                 " (SAMPLE(?DR) as ?DR)(SAMPLE(?RIP) as ?RIP)(SAMPLE(?article) as ?article) " +
-                "WHERE {VALUES ?item { " + itemValues + " } ?item wdt:P31 wd:Q5. OPTIONAL{?item wdt:P569 ?DR .}" +
+                "WHERE {VALUES ?item { " + itemValues + " } ?item wdt:P31 wd:Q5. ?item rdfs:label ?searchLabel. " +
+                "FILTER(LANG(?searchLabel) = 'en'). FILTER(REGEX(?searchLabel, \"" + escapedSearchPattern + "\", 'i')). " +
+                "OPTIONAL{?item wdt:P569 ?DR .}" +
                 " ?article schema:about ?item . ?article schema:inLanguage 'en'. ?article schema:isPartOf <https://en.wikipedia.org/>. " +
                 "OPTIONAL{?item wdt:P570 ?RIP .} " +
                 "OPTIONAL{?item wdt:P18 ?image .} " +
@@ -198,6 +201,16 @@ namespace WikiDataLib
             return Regex.Escape(searchString)
                 .Replace(@"\*", ".*")
                 .Replace(@"\?", ".");
+        }
+
+        private static string EscapeSparqlStringLiteral(string value)
+        {
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"")
+                .Replace("\r", "\\r")
+                .Replace("\n", "\\n")
+                .Replace("\t", "\\t");
         }
 
         private static string BuildPersonByIdQuery(int id)
