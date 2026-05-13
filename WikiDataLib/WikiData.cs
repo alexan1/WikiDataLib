@@ -103,7 +103,7 @@ namespace WikiDataLib
 
         private static async Task<Collection<int>> SearchEntityIdsAsync(string searchString, CancellationToken cancellationToken)
         {
-            var url = $"https://www.wikidata.org/w/api.php?action=query&list=search&srsearch={Uri.EscapeDataString(searchString)}&format=json&srlimit=50";
+            var url = $"https://www.wikidata.org/w/api.php?action=query&list=search&srsearch={Uri.EscapeDataString(searchString)}&format=json&srlimit=50&origin=*";
             var root = await ExecuteJsonRequestAsync(url, cancellationToken).ConfigureAwait(false);
 
             var entityIds = new Collection<int>();
