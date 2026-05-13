@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace WikiTest
+namespace WikiDataTest
 {
     [TestClass]
     public class WikiTests
