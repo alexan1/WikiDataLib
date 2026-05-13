@@ -286,8 +286,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### v1.1.7 (Current)
-- Added partial and wildcard people search examples and documentation
+### v1.1.8 (Current)
+- Fixed browser-based `WikiPeopleSearchAsync` calls by enabling CORS on the MediaWiki search request
 
 ### v1.1.5
 - Fixed `System.Text.Json` version compatibility (`netstandard2.0` uses v8.0.5; `net10.0` uses built-in)
