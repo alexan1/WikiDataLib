@@ -82,9 +82,10 @@ namespace WikiDataLib
                     .Select((id, index) => new { id, index })
                     .ToDictionary(item => item.id, item => item.index);
 
-                var foundPersons = bindings
-                    .EnumerateArray()
-                    .Select(GetPersonFromJsonElement)
+                var personElements = bindings.EnumerateArray().ToArray();
+                var personTasks = personElements.Select(async p => await GetPersonFromJsonElementAsync(p)).ToArray();
+                var personsArray = await Task.WhenAll(personTasks).ConfigureAwait(false);
+                var foundPersons = personsArray
                     .Where(person => person.Name != null && Regex.IsMatch(person.Name, searchPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
                     .OrderBy(person => idOrder.TryGetValue(person.Id, out var index) ? index : int.MaxValue)
                     .ToList();
@@ -165,7 +166,7 @@ namespace WikiDataLib
                 }
 
                 var item = bindings[0];
-                var person = GetPersonFromJsonElement(item);
+                                var person = await GetPersonFromJsonElementAsync(item).ConfigureAwait(false);
 
                 return person;
             }
@@ -308,7 +309,7 @@ namespace WikiDataLib
             return true;
         }
 
-        private static WikiPerson GetPersonFromJsonElement(JsonElement item)
+        private static async Task<WikiPerson> GetPersonFromJsonElementAsync(JsonElement item)
         {
             var id = ExtractId(item);
             var name = ExtractStringProperty(item, FieldItemLabel);
@@ -317,6 +318,12 @@ namespace WikiDataLib
             var death = ExtractDateProperty(item, FieldDeathDate);
             var image = ExtractStringProperty(item, FieldImage);
             var link = ExtractStringProperty(item, FieldArticle);
+
+            // Resolve redirecting image URLs (e.g., Special:FilePath) to their final direct URL
+            if (!string.IsNullOrWhiteSpace(image))
+            {
+                image = await ResolveFinalUrlAsync(image).ConfigureAwait(false) ?? image;
+            }
 
             return new WikiPerson
             {
@@ -371,6 +378,23 @@ namespace WikiDataLib
             }
 
             return null;
+        }
+
+        private static async Task<string?> ResolveFinalUrlAsync(string url)
+        {
+            try
+            {
+                using (var request = new HttpRequestMessage(HttpMethod.Get, url))
+                using (var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+                {
+                    return response.RequestMessage?.RequestUri?.ToString() ?? url;
+                }
+            }
+            catch
+            {
+                // If anything goes wrong, return the original URL so callers get a usable value
+                return url;
+            }
         }
     }
 }
