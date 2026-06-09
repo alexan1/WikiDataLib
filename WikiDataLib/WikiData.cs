@@ -332,9 +332,10 @@ var personsArray = await Task.WhenAll(personTasks).ConfigureAwait(false);
             var link = ExtractStringProperty(item, FieldArticle);
 
             // Resolve redirecting image URLs (e.g., Special:FilePath) to their final direct URL
-            if (!string.IsNullOrWhiteSpace(image))
+            if (!string.IsNullOrWhiteSpace(image) &&
+                image.IndexOf("Special:FilePath", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                image = await ResolveFinalUrlAsync(image).ConfigureAwait(false) ?? image;
+                image = await ResolveFinalUrlAsync(image).ConfigureAwait(false);
             }
 
             return new WikiPerson
