@@ -397,9 +397,18 @@ var personsArray = await Task.WhenAll(personTasks).ConfigureAwait(false);
         {
             try
             {
-                using (var request = new HttpRequestMessage(HttpMethod.Get, url))
+                using (var request = new HttpRequestMessage(HttpMethod.Head, url))
                 using (var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
                 {
+                    if (response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
+                    {
+                        using (var getRequest = new HttpRequestMessage(HttpMethod.Get, url))
+                        using (var getResponse = await _httpClient.SendAsync(getRequest, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
+                        {
+                            return getResponse.RequestMessage?.RequestUri?.ToString() ?? url;
+                        }
+                    }
+
                     return response.RequestMessage?.RequestUri?.ToString() ?? url;
                 }
             }
