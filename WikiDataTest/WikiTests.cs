@@ -208,6 +208,16 @@ namespace WikiDataTest
                 "Link should be an English Wikipedia URL");
         }
 
+        [TestMethod]
+        public async Task WhenGettingPersonById_ShouldResolveImageRedirect()
+        {
+            var person = await WikiData.GetWikiPersonAsync(303);
+
+            Assert.IsNotNull(person.Image);
+            Assert.IsFalse(person.Image.Contains("Special:FilePath", StringComparison.OrdinalIgnoreCase),
+                "Image should be resolved to a final URL");
+        }
+
         #endregion
     }
 }
