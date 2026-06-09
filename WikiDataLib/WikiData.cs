@@ -82,9 +82,21 @@ namespace WikiDataLib
                     .Select((id, index) => new { id, index })
                     .ToDictionary(item => item.id, item => item.index);
 
-                var personElements = bindings.EnumerateArray().ToArray();
-                var personTasks = personElements.Select(async p => await GetPersonFromJsonElementAsync(p)).ToArray();
-                var personsArray = await Task.WhenAll(personTasks).ConfigureAwait(false);
+var personElements = bindings.EnumerateArray().ToArray();
+using var throttler = new SemaphoreSlim(4);
+var personTasks = personElements.Select(async p =>
+{
+    await throttler.WaitAsync(cancellationToken).ConfigureAwait(false);
+    try
+    {
+        return await GetPersonFromJsonElementAsync(p).ConfigureAwait(false);
+    }
+    finally
+    {
+        throttler.Release();
+    }
+}).ToArray();
+var personsArray = await Task.WhenAll(personTasks).ConfigureAwait(false);
                 var foundPersons = personsArray
                     .Where(person => person.Name != null && Regex.IsMatch(person.Name, searchPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
                     .OrderBy(person => idOrder.TryGetValue(person.Id, out var index) ? index : int.MaxValue)
