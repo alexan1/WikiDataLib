@@ -178,7 +178,7 @@ var personsArray = await Task.WhenAll(personTasks).ConfigureAwait(false);
                 }
 
                 var item = bindings[0];
-                                var person = await GetPersonFromJsonElementAsync(item).ConfigureAwait(false);
+                var person = await GetPersonFromJsonElementAsync(item).ConfigureAwait(false);
 
                 return person;
             }
