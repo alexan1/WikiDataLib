@@ -187,12 +187,12 @@ namespace WikiDataLib
             return "SELECT distinct (SAMPLE(?image)as ?image) ?item ?itemLabel ?itemDescription" +
                 " (SAMPLE(?DR) as ?DR)(SAMPLE(?RIP) as ?RIP)(SAMPLE(?article) as ?article) " +
                 "WHERE {VALUES ?item { " + itemValues + " } ?item wdt:P31 wd:Q5. ?item rdfs:label ?searchLabel. " +
-                "FILTER(LANG(?searchLabel) IN ('en','mul')). FILTER(REGEX(?searchLabel, \"" + escapedSearchPattern + "\", 'i')). " +
+                "FILTER(LANG(?searchLabel) IN ('en','fr','ru','mul')). FILTER(REGEX(?searchLabel, \"" + escapedSearchPattern + "\", 'i')). " +
                 "OPTIONAL{?item wdt:P569 ?DR .}" +
                 " ?article schema:about ?item . ?article schema:inLanguage 'en'. ?article schema:isPartOf <https://en.wikipedia.org/>. " +
                 "OPTIONAL{?item wdt:P570 ?RIP .} " +
                 "OPTIONAL{?item wdt:P18 ?image .} " +
-                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. }} " +
+                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,fr,ru,mul'. }} " +
                 "GROUP BY ?item ?itemLabel ?itemDescription LIMIT 50";
         }
 
@@ -222,7 +222,7 @@ namespace WikiDataLib
                 "OPTIONAL { ?item  wdt:P569  ?DR }" +
                 "OPTIONAL { ?item  wdt:P570  ?RIP }" +
                 "OPTIONAL { ?item  wdt:P18  ?image }" +
-                "SERVICE wikibase:label { bd:serviceParam wikibase:language  'en,mul'}}" +
+                "SERVICE wikibase:label { bd:serviceParam wikibase:language  'en,fr,ru,mul'}}" +
                 "GROUP BY ?item ?itemLabel ?itemDescription";
         }
 
