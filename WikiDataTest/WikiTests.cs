@@ -208,6 +208,23 @@ namespace WikiDataTest
                 "Link should be an English Wikipedia URL");
         }
 
+        [TestMethod]
+        public async Task WhenGettingQ22686_ShouldFallbackToMulAndReturnName()
+        {
+            // Skip this live integration test when running in CI
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
+            {
+                return;
+            }
+
+            var person = await WikiData.GetWikiPersonAsync(22686); // Q22686 (Donald Trump)
+
+            Assert.IsNotNull(person);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(person.Name));
+            Assert.IsTrue(person.Name.IndexOf("Donald", StringComparison.OrdinalIgnoreCase) >= 0,
+                "Expected name to contain 'Donald' (case-insensitive)");
+        }
+
         #endregion
     }
 }
