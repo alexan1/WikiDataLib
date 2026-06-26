@@ -1,0 +1,46 @@
+{
+  "head": {
+    "vars": [
+      "image",
+      "item",
+      "itemLabel",
+      "itemDescription",
+      "DR",
+      "RIP",
+      "article"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "item": {
+          "type": "uri",
+          "value": "http://www.wikidata.org/entity/Q22686"
+        },
+        "itemLabel": {
+          "xml:lang": "ru",
+          "type": "literal",
+          "value": "Дональд Трамп"
+        },
+        "itemDescription": {
+          "xml:lang": "en",
+          "type": "literal",
+          "value": "American businessman and politician (born 1946), President of the United States (2017–2021; since 2025)"
+        },
+        "image": {
+          "type": "uri",
+          "value": "http://commons.wikimedia.org/wiki/Special:FilePath/Official%20Presidential%20Portrait%20of%20President%20Donald%20J.%20Trump%20%282025%29%20%28cropped%29%282%29.jpg"
+        },
+        "DR": {
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "type": "literal",
+          "value": "1946-06-14T00:00:00Z"
+        },
+        "article": {
+          "type": "uri",
+          "value": "https://en.wikipedia.org/wiki/Donald_Trump"
+        }
+      }
+    ]
+  }
+}

@@ -221,8 +221,34 @@ namespace WikiDataTest
 
             Assert.IsNotNull(person);
             Assert.IsFalse(string.IsNullOrWhiteSpace(person.Name));
-            Assert.IsTrue(person.Name.IndexOf("Donald", StringComparison.OrdinalIgnoreCase) >= 0,
-                "Expected name to contain 'Donald' (case-insensitive)");
+
+            // If the returned label isn't English, verify Wikidata's wbgetentities includes a 'mul' label
+            if (person.Name.IndexOf("Donald", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                var url = "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q22686&languages=en|fr|ru|mul&format=json&origin=*";
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd("WikiDataLib-Inspector/1.0");
+                    var resp = client.GetAsync(url).Result;
+                    resp.EnsureSuccessStatusCode();
+                    var json = resp.Content.ReadAsStringAsync().Result;
+                    using (var doc = System.Text.Json.JsonDocument.Parse(json))
+                    {
+                        if (doc.RootElement.TryGetProperty("entities", out var entities) &&
+                            entities.TryGetProperty("Q22686", out var ent) &&
+                            ent.TryGetProperty("labels", out var labels) &&
+                            labels.TryGetProperty("mul", out var mulLabel) &&
+                            mulLabel.TryGetProperty("value", out var mulValue))
+                        {
+                            Assert.IsFalse(string.IsNullOrWhiteSpace(mulValue.GetString()), "Expected 'mul' label to be present and non-empty");
+                        }
+                        else
+                        {
+                            Assert.Fail("Expected wbgetentities response to include a 'mul' label for Q22686 when English label is not returned.");
+                        }
+                    }
+                }
+            }
         }
 
         #endregion

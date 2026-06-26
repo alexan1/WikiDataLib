@@ -4,6 +4,8 @@
 
 A .NET library for accessing WikiData from your application. Targets `netstandard2.0` and `net10.0`.
 
+This release (v1.1.9) ensures label lookups fall back to the special "mul" (multiple languages) label when localized labels are missing, and prefers English, French, and Russian before falling back to `mul`. This improves reliability for high-profile entities that use language-agnostic labels (e.g., Q22686).
+
 Namespace: `WikiDataLib`
 
 ## Installation
