@@ -17,7 +17,7 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Version>1.1.9</Version>
+    <Version>1.1.10</Version>
   </PropertyGroup>
 
   <ItemGroup>
