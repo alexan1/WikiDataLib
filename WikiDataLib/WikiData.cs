@@ -222,7 +222,7 @@ namespace WikiDataLib
                 "OPTIONAL { ?item  wdt:P569  ?DR }" +
                 "OPTIONAL { ?item  wdt:P570  ?RIP }" +
                 "OPTIONAL { ?item  wdt:P18  ?image }" +
-                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en, mul'}}" +
+                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'}}" +
                 "GROUP BY ?item ?itemLabel ?itemDescription";
         }
 
