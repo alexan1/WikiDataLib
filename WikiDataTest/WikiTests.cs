@@ -252,5 +252,35 @@ namespace WikiDataTest
         }
 
         #endregion
+
+        [TestMethod]
+        public async Task WhenSearchingForTrump_ShouldReturnResults()
+        {
+            var people = await WikiData.WikiPeopleSearchAsync("trump");
+            Assert.AreNotEqual(0, people.Count);
+        }
+
+        [TestMethod]
+        public async Task WhenGettingDonaldTrump_ShouldReturnCorrectName()
+        {
+            var person = await WikiData.GetWikiPersonAsync(22686);
+
+            Assert.IsNotNull(person);
+            Assert.AreEqual("Donald Trump", person.Name);
+        }
+
+        [TestMethod]
+        public async Task WhenSearchingByPartialSurname_ShouldIncludeDonaldTrump()
+        {
+            var people = await WikiData.WikiPeopleSearchAsync("trump");
+
+            Assert.IsTrue(people.Any(person => person.Name == "Donald Trump"),
+                "Search for 'trump' should include Donald Trump");
+
+            Assert.IsTrue(people.Any(person => person.Id == 22686),
+                "Search for 'trump' should include 22686"); 
+        }
+
+        #endregion
     }
 }
