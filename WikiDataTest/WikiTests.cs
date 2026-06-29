@@ -250,9 +250,7 @@ namespace WikiDataTest
                 }
             }
         }
-
-        #endregion
-
+       
         [TestMethod]
         public async Task WhenSearchingForTrump_ShouldReturnResults()
         {
