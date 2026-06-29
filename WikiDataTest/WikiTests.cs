@@ -268,8 +268,7 @@ namespace WikiDataTest
         }
 
         [TestMethod]
-        public async Task WhenSearchingByPartialSurname_ShouldIncludeDonaldTrump()
-        {
+        public async Task WhenSearchingBySurname_ShouldIncludeDonaldTrump()
             var people = await WikiData.WikiPeopleSearchAsync("trump");
 
             Assert.IsTrue(people.Any(person => person.Name == "Donald Trump"),
