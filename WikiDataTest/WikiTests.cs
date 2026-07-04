@@ -4,7 +4,6 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Reflection;
 
 namespace WikiDataTest
 {
@@ -212,13 +211,7 @@ namespace WikiDataTest
         [TestMethod]
         public void WhenGettingPeopleBornTodayQuery_ShouldUseDateFiltersAndLimit()
         {
-            var method = typeof(WikiData).GetMethod(
-                "BuildPeopleBornTodayQuery",
-                BindingFlags.NonPublic | BindingFlags.Static);
-
-            Assert.IsNotNull(method);
-
-            var query = method.Invoke(null, null) as string;
+            var query = WikiData.BuildPeopleBornTodayQuery();
 
             Assert.IsNotNull(query);
             Assert.IsTrue(query.Contains("MONTH(NOW())"));

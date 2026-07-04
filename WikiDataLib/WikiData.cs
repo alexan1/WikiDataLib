@@ -7,6 +7,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("WikiDataTest")]
 
 namespace WikiDataLib
 {
@@ -32,7 +35,7 @@ namespace WikiDataLib
 
         private static readonly HttpClient _httpClient = new HttpClient
         {
-            Timeout = Timeout.InfiniteTimeSpan
+            Timeout = TimeSpan.FromSeconds(30)
         };
 
         // In-memory cache keyed by SPARQL query string
@@ -71,7 +74,7 @@ namespace WikiDataLib
                 }
 
                 var query = BuildSearchQuery(entityIds, searchPattern);
-                var root = await ExecuteSparqlQueryAsync(query, cancellationToken, TimeSpan.FromSeconds(120)).ConfigureAwait(false);
+                var root = await ExecuteSparqlQueryAsync(query, cancellationToken, retryAttempts: 2).ConfigureAwait(false);
 
                 if (!TryGetBindings(root, out var bindings))
                 {
@@ -233,7 +236,7 @@ namespace WikiDataLib
                 "GROUP BY ?item ?itemLabel ?itemDescription LIMIT 50";
         }
 
-        private static string BuildPeopleBornTodayQuery()
+        internal static string BuildPeopleBornTodayQuery()
         {
             return "SELECT distinct ?item ?itemLabel ?itemDescription ?DR ?article " +
                 "WHERE { ?item wdt:P31 wd:Q5. ?item wdt:P569 ?DR . " +
@@ -273,14 +276,14 @@ namespace WikiDataLib
                 "GROUP BY ?item ?itemLabel ?itemDescription";
         }
 
-        private static async Task<JsonElement> ExecuteSparqlQueryAsync(string query, CancellationToken cancellationToken, TimeSpan? timeout = null)
+        private static async Task<JsonElement> ExecuteSparqlQueryAsync(string query, CancellationToken cancellationToken, int retryAttempts = MaxRetryAttempts)
         {
             var url = $"{WikiDataSparqlEndpoint}?query={Uri.EscapeDataString(query)}&format=json";
 
-            return await ExecuteJsonRequestAsync(url, cancellationToken, timeout).ConfigureAwait(false);
+            return await ExecuteJsonRequestAsync(url, cancellationToken, retryAttempts).ConfigureAwait(false);
         }
 
-        private static async Task<JsonElement> ExecuteJsonRequestAsync(string url, CancellationToken cancellationToken, TimeSpan? timeout = null)
+        private static async Task<JsonElement> ExecuteJsonRequestAsync(string url, CancellationToken cancellationToken, int retryAttempts = MaxRetryAttempts)
         {
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -290,39 +293,34 @@ namespace WikiDataLib
                 return cached;
             }
 
-            for (int attempt = 1; attempt <= MaxRetryAttempts; attempt++)
+            for (int attempt = 1; attempt <= retryAttempts; attempt++)
             {
                 try
                 {
-                    using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                    using (var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false))
                     {
-                        timeoutCts.CancelAfter(timeout ?? TimeSpan.FromSeconds(30));
-
-                        using (var response = await _httpClient.GetAsync(url, timeoutCts.Token).ConfigureAwait(false))
+                        // Only retry transient server errors (429, 5xx); fail fast on 4xx
+                        if (!response.IsSuccessStatusCode)
                         {
-                            // Only retry transient server errors (429, 5xx); fail fast on 4xx
-                            if (!response.IsSuccessStatusCode)
+                            var code = (int)response.StatusCode;
+                            bool isTransient = code == 429 || code >= 500;
+                            if (!isTransient || attempt >= retryAttempts)
                             {
-                                var code = (int)response.StatusCode;
-                                bool isTransient = code == 429 || code >= 500;
-                                if (!isTransient || attempt >= MaxRetryAttempts)
-                                {
-                                    response.EnsureSuccessStatusCode();
-                                }
-                                var delay = code == 429
-                                    ? TimeSpan.FromSeconds(Math.Pow(2, attempt + 1))
-                                    : TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-                                continue;
+                                response.EnsureSuccessStatusCode();
                             }
+                            var delay = code == 429
+                                ? TimeSpan.FromSeconds(Math.Pow(2, attempt + 1))
+                                : TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                            continue;
+                        }
 
-                            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                            using (var doc = JsonDocument.Parse(json))
-                            {
-                                var result = doc.RootElement.Clone();
-                                _cache.TryAdd(url, result);
-                                return result;
-                            }
+                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        using (var doc = JsonDocument.Parse(json))
+                        {
+                            var result = doc.RootElement.Clone();
+                            _cache.TryAdd(url, result);
+                            return result;
                         }
                     }
                 }

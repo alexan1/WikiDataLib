@@ -82,7 +82,8 @@ catch (HttpRequestException ex)
 
 ```csharp
 var people = await WikiData.GetPeopleBornTodayAsync();
-var sample = people.OrderBy(_ => Random.Shared.Next()).Take(10).ToList();
+var random = new Random();
+var sample = people.OrderBy(_ => random.Next()).Take(10).ToList();
 ```
 
 The query returns up to 100 people born on today's date. Shuffle client-side if you want a random sample.
