@@ -58,6 +58,25 @@ var person = await WikiData.GetWikiPersonAsync(303); // Q303 = Elvis Presley
 - `id` — numeric WikiData entity ID, e.g. `303` for `Q303` (throws `ArgumentOutOfRangeException` if ≤ 0)
 - `cancellationToken` — optional cancellation token
 
+### `WikiData.GetPeopleBornTodayAsync`
+
+Get people born on today's date from WikiData.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetPeopleBornTodayAsync(
+    CancellationToken cancellationToken = default)
+```
+
+**Parameters:**
+- `cancellationToken` — optional cancellation token
+
+**Returns:**
+- `Collection<WikiPerson>` — people born today (up to 100 results)
+
+**Notes:**
+- Uses `MONTH(NOW())` and `DAY(NOW())` in the SPARQL query
+- Results are not randomized; shuffle client-side and take a sample if needed
+
 ## WikiPerson Class
 
 ```csharp

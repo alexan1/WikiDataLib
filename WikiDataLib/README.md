@@ -9,7 +9,7 @@ A modern, robust .NET library for accessing WikiData SPARQL queries to search an
 
 ✅ **Modern & Safe**: C# 8.0 with nullable reference types  
 ✅ **Async/Await**: Full async support with cancellation tokens  
-✅ **Well-tested**: Comprehensive test coverage (17 tests)  
+✅ **Well-tested**: Comprehensive test coverage (26 tests)  
 ✅ **Error Handling**: Robust error handling with meaningful exceptions  
 ✅ **Cross-platform**: Targets .NET Standard 2.0 and .NET 10  
 ✅ **Production-ready**: Input validation, resource management, XML documentation  
@@ -78,6 +78,15 @@ catch (HttpRequestException ex)
 }
 ```
 
+### People Born Today
+
+```csharp
+var people = await WikiData.GetPeopleBornTodayAsync();
+var sample = people.OrderBy(_ => Random.Shared.Next()).Take(10).ToList();
+```
+
+The query returns up to 100 people born on today's date. Shuffle client-side if you want a random sample.
+
 ## API Reference
 
 ### WikiData.WikiPeopleSearchAsync
@@ -123,6 +132,26 @@ public static Task<WikiPerson> GetWikiPersonAsync(
 **Exceptions:**
 - `ArgumentOutOfRangeException` - When id is less than or equal to 0
 - `InvalidOperationException` - When no person is found with the given ID
+- `HttpRequestException` - When the WikiData API request fails
+- `JsonException` - When the response cannot be parsed
+- `TaskCanceledException` - When the operation is cancelled
+
+### WikiData.GetPeopleBornTodayAsync
+
+Gets people born on today's date from WikiData.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetPeopleBornTodayAsync(
+    CancellationToken cancellationToken = default)
+```
+
+**Parameters:**
+- `cancellationToken` - Cancellation token to cancel the operation (optional)
+
+**Returns:**
+- `Collection<WikiPerson>` - Collection of people born today (up to 100 results)
+
+**Exceptions:**
 - `HttpRequestException` - When the WikiData API request fails
 - `JsonException` - When the response cannot be parsed
 - `TaskCanceledException` - When the operation is cancelled

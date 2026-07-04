@@ -4,6 +4,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reflection;
 
 namespace WikiDataTest
 {
@@ -209,6 +210,25 @@ namespace WikiDataTest
         }
 
         [TestMethod]
+        public void WhenGettingPeopleBornTodayQuery_ShouldUseDateFiltersAndLimit()
+        {
+            var method = typeof(WikiData).GetMethod(
+                "BuildPeopleBornTodayQuery",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(method);
+
+            var query = method.Invoke(null, null) as string;
+
+            Assert.IsNotNull(query);
+            Assert.IsTrue(query.Contains("MONTH(NOW())"));
+            Assert.IsTrue(query.Contains("DAY(NOW())"));
+            Assert.IsTrue(query.Contains("schema:isPartOf <https://en.wikipedia.org/>"));
+            Assert.IsTrue(query.Contains("LIMIT 100"));
+            Assert.IsFalse(query.Contains("ORDER BY"));
+        }
+
+        [TestMethod]
         public async Task WhenGettingQ22686_ShouldFallbackToMulAndReturnName()
         {
             // Skip this live integration test when running in CI
@@ -277,6 +297,20 @@ namespace WikiDataTest
 
             Assert.IsTrue(people.Any(person => person.Id == 22686),
                 "Search for 'trump' should include 22686"); 
+        }
+
+        #endregion
+
+        #region Cancellation Token Tests - GetPeopleBornTodayAsync
+
+        [TestMethod]
+        public async Task WhenCancellationTokenIsCancelled_ForPeopleBornToday_ShouldThrowOperationCanceledException()
+        {
+            var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsExceptionAsync<OperationCanceledException>(
+                async () => await WikiData.GetPeopleBornTodayAsync(cts.Token));
         }
 
         #endregion
