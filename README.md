@@ -58,6 +58,36 @@ var person = await WikiData.GetWikiPersonAsync(303); // Q303 = Elvis Presley
 - `id` — numeric WikiData entity ID, e.g. `303` for `Q303` (throws `ArgumentOutOfRangeException` if ≤ 0)
 - `cancellationToken` — optional cancellation token
 
+### `WikiData.GetPeopleBornOnDateAsync`
+
+Get people born on a specific month/day.
+
+```csharp
+public static async Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
+    int month,
+    int day,
+    int limit,
+    CancellationToken cancellationToken = default)
+```
+
+### `WikiData.GetPeopleDiedOnDateAsync`
+
+Get people who died on a specific month/day.
+
+```csharp
+public static async Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
+    int month,
+    int day,
+    int limit,
+    CancellationToken cancellationToken = default)
+```
+
+**Examples:**
+```csharp
+var born = await WikiData.GetPeopleBornOnDateAsync(1, 8, 100);
+var died = await WikiData.GetPeopleDiedOnDateAsync(8, 16, 100);
+```
+
 ## WikiPerson Class
 
 ```csharp

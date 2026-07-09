@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -179,6 +180,30 @@ namespace WikiDataLib
             }
         }
 
+        /// <summary>
+        /// Gets people born on a specific month and day.
+        /// </summary>
+        public static Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
+            int month,
+            int day,
+            int limit,
+            CancellationToken cancellationToken = default)
+        {
+            return GetPeopleOnDateAsync("P569", "born", month, day, limit, cancellationToken);
+        }
+
+        /// <summary>
+        /// Gets people died on a specific month and day.
+        /// </summary>
+        public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
+            int month,
+            int day,
+            int limit,
+            CancellationToken cancellationToken = default)
+        {
+            return GetPeopleOnDateAsync("P570", "died", month, day, limit, cancellationToken);
+        }
+
         private static string BuildSearchQuery(Collection<int> entityIds, string searchPattern)
         {
             var itemValues = string.Join(" ", entityIds.Select(id => $"wd:Q{id}"));
@@ -194,6 +219,44 @@ namespace WikiDataLib
                 "OPTIONAL{?item wdt:P18 ?image .} " +
                 "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. }} " +
                 "GROUP BY ?item ?itemLabel ?itemDescription LIMIT 50";
+        }
+
+        private static async Task<Collection<WikiPerson>> GetPeopleOnDateAsync(
+            string dateProperty,
+            string kind,
+            int month,
+            int day,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            ValidateMonthDayLimit(month, day, limit);
+
+            var query = BuildPeopleOnDateQuery(dateProperty, month, day, limit);
+
+            try
+            {
+                var root = await ExecuteSparqlQueryAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (!TryGetBindings(root, out var bindings))
+                {
+                    return new Collection<WikiPerson>();
+                }
+
+                var foundPersons = bindings
+                    .EnumerateArray()
+                    .Select(GetPersonFromJsonElement)
+                    .ToList();
+
+                return new Collection<WikiPerson>(foundPersons);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new HttpRequestException($"Failed to retrieve WikiData people {kind} on {month}/{day}.", ex);
+            }
+            catch (JsonException ex)
+            {
+                throw new JsonException($"Failed to parse WikiData response for people {kind} on {month}/{day}.", ex);
+            }
         }
 
         private static string BuildSearchPattern(string searchString)
@@ -224,6 +287,38 @@ namespace WikiDataLib
                 "OPTIONAL { ?item  wdt:P18  ?image }" +
                 "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'}}" +
                 "GROUP BY ?item ?itemLabel ?itemDescription";
+        }
+
+        private static string BuildPeopleOnDateQuery(string dateProperty, int month, int day, int limit)
+        {
+            return "SELECT distinct ?item ?itemLabel ?itemDescription ?DR ?RIP " +
+                "WHERE { " +
+                "?item wdt:P31 wd:Q5. " +
+                $"?item wdt:{dateProperty} ?date. " +
+                $"FILTER(MONTH(?date) = {month} && DAY(?date) = {day}). " +
+                "OPTIONAL { ?item wdt:P569 ?DR } " +
+                "OPTIONAL { ?item wdt:P570 ?RIP } " +
+                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. } " +
+                $"}} LIMIT {limit}";
+        }
+
+        private static void ValidateMonthDayLimit(int month, int day, int limit)
+        {
+            if (month < 1 || month > 12)
+            {
+                throw new ArgumentOutOfRangeException(nameof(month), "Month must be between 1 and 12.");
+            }
+
+            var maxDay = DateTime.DaysInMonth(2000, month);
+            if (day < 1 || day > maxDay)
+            {
+                throw new ArgumentOutOfRangeException(nameof(day), $"Day must be between 1 and {maxDay} for month {month}.");
+            }
+
+            if (limit <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than 0.");
+            }
         }
 
         private static async Task<JsonElement> ExecuteSparqlQueryAsync(string query, CancellationToken cancellationToken)
@@ -365,9 +460,13 @@ namespace WikiDataLib
             }
 
             var dateString = property.GetProperty("value").GetString();
-            if (dateString != null && DateTime.TryParse(dateString, out var date))
+            if (dateString != null)
             {
-                return date;
+                var datePart = dateString.Split('T')[0].TrimStart('+');
+                if (DateTime.TryParseExact(datePart, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                {
+                    return date;
+                }
             }
 
             return null;

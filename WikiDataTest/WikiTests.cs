@@ -80,6 +80,31 @@ namespace WikiDataTest
 
         #endregion
 
+        #region Input Validation Tests - GetPeopleBornOnDateAsync / GetPeopleDiedOnDateAsync
+
+        [TestMethod]
+        public async Task WhenBirthMonthIsInvalid_ShouldThrowArgumentOutOfRangeException()
+        {
+            await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(
+                async () => await WikiData.GetPeopleBornOnDateAsync(0, 1, 10));
+        }
+
+        [TestMethod]
+        public async Task WhenBirthDayIsInvalid_ShouldThrowArgumentOutOfRangeException()
+        {
+            await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(
+                async () => await WikiData.GetPeopleBornOnDateAsync(2, 30, 10));
+        }
+
+        [TestMethod]
+        public async Task WhenLimitIsInvalid_ShouldThrowArgumentOutOfRangeException()
+        {
+            await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(
+                async () => await WikiData.GetPeopleDiedOnDateAsync(8, 16, 0));
+        }
+
+        #endregion
+
         #region Edge Case Tests
 
         [TestMethod]
@@ -265,6 +290,48 @@ namespace WikiDataTest
 
             Assert.IsNotNull(person);
             Assert.AreEqual("Donald Trump", person.Name);
+        }
+
+        [TestMethod]
+        public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays()
+        {
+            try
+            {
+                var people = await WikiData.GetPeopleBornOnDateAsync(1, 8, 1);
+
+                Assert.IsNotNull(people);
+                Assert.IsTrue(people.Count > 0, "Expected at least one person born on January 8.");
+                Assert.IsTrue(people.All(person => person.Birthday.HasValue &&
+                    person.Birthday.Value.Month == 1 &&
+                    person.Birthday.Value.Day == 8),
+                    "All returned people should have a January 8 birthday.");
+                Assert.IsTrue(people.Count <= 1, "Result count should respect the supplied limit.");
+            }
+            catch (TaskCanceledException)
+            {
+                Assert.Inconclusive("The public Wikidata SPARQL endpoint timed out for this live smoke test.");
+            }
+        }
+
+        [TestMethod]
+        public async Task WhenGettingPeopleDiedOnDate_ShouldReturnMatchingDeathDates()
+        {
+            try
+            {
+                var people = await WikiData.GetPeopleDiedOnDateAsync(8, 16, 1);
+
+                Assert.IsNotNull(people);
+                Assert.IsTrue(people.Count > 0, "Expected at least one person who died on August 16.");
+                Assert.IsTrue(people.All(person => person.Death.HasValue &&
+                    person.Death.Value.Month == 8 &&
+                    person.Death.Value.Day == 16),
+                    "All returned people should have an August 16 death date.");
+                Assert.IsTrue(people.Count <= 1, "Result count should respect the supplied limit.");
+            }
+            catch (TaskCanceledException)
+            {
+                Assert.Inconclusive("The public Wikidata SPARQL endpoint timed out for this live smoke test.");
+            }
         }
 
         [TestMethod]
