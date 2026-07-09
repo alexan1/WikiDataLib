@@ -127,6 +127,35 @@ public static Task<WikiPerson> GetWikiPersonAsync(
 - `JsonException` - When the response cannot be parsed
 - `TaskCanceledException` - When the operation is cancelled
 
+### WikiData.GetPeopleBornOnDateAsync
+
+Gets people born on a specific month and day.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
+    int month,
+    int day,
+    int limit,
+    CancellationToken cancellationToken = default)
+```
+
+### WikiData.GetPeopleDiedOnDateAsync
+
+Gets people who died on a specific month and day.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
+    int month,
+    int day,
+    int limit,
+    CancellationToken cancellationToken = default)
+```
+
+```csharp
+var born = await WikiData.GetPeopleBornOnDateAsync(1, 8, 100);
+var died = await WikiData.GetPeopleDiedOnDateAsync(8, 16, 100);
+```
+
 ### WikiPerson Class
 
 Represents a person entity from WikiData.
