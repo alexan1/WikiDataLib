@@ -193,7 +193,7 @@ namespace WikiDataLib
         }
 
         /// <summary>
-        /// Gets people died on a specific month and day.
+        /// Gets people who died on a specific month and day.
         /// </summary>
         public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
             int month,
@@ -291,13 +291,31 @@ namespace WikiDataLib
 
         private static string BuildPeopleOnDateQuery(string dateProperty, int month, int day, int limit)
         {
+            string requiredDateAssignment;
+            string optionalOtherDateBinding;
+
+            if (dateProperty == "P569")
+            {
+                requiredDateAssignment = "BIND(?date AS ?DR) ";
+                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P570 ?RIP } ";
+            }
+            else if (dateProperty == "P570")
+            {
+                requiredDateAssignment = "BIND(?date AS ?RIP) ";
+                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P569 ?DR } ";
+            }
+            else
+            {
+                throw new ArgumentException("Unsupported date property.", nameof(dateProperty));
+            }
+
             return "SELECT distinct ?item ?itemLabel ?itemDescription ?DR ?RIP " +
                 "WHERE { " +
                 "?item wdt:P31 wd:Q5. " +
-                $"?item wdt:{dateProperty} ?date. " +
+                "?item wdt:" + dateProperty + " ?date. " +
                 $"FILTER(MONTH(?date) = {month} && DAY(?date) = {day}). " +
-                "OPTIONAL { ?item wdt:P569 ?DR } " +
-                "OPTIONAL { ?item wdt:P570 ?RIP } " +
+                requiredDateAssignment +
+                optionalOtherDateBinding +
                 "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. } " +
                 $"}} LIMIT {limit}";
         }

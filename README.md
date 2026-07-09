@@ -63,7 +63,7 @@ var person = await WikiData.GetWikiPersonAsync(303); // Q303 = Elvis Presley
 Get people born on a specific month/day.
 
 ```csharp
-public static async Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
+public static Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
     int month,
     int day,
     int limit,
@@ -75,7 +75,7 @@ public static async Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
 Get people who died on a specific month/day.
 
 ```csharp
-public static async Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
+public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
     int month,
     int day,
     int limit,
