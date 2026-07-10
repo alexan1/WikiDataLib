@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using WikiDataLib;
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -101,6 +102,13 @@ namespace WikiDataTest
         {
             await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(
                 async () => await WikiData.GetPeopleDiedOnDateAsync(8, 16, 0));
+        }
+
+        [TestMethod]
+        public async Task WhenDeathYearIsInvalid_ShouldThrowArgumentOutOfRangeException()
+        {
+            await Assert.ThrowsExceptionAsync<ArgumentOutOfRangeException>(
+                async () => await WikiData.GetPeopleDiedOnDateAsync(0, 8, 16, 10));
         }
 
         #endregion
@@ -231,6 +239,26 @@ namespace WikiDataTest
             Assert.IsNotNull(person.Link);
             Assert.IsTrue(person.Link.StartsWith("https://en.wikipedia.org/"), 
                 "Link should be an English Wikipedia URL");
+        }
+
+        [TestMethod]
+        public void WhenBuildingPeopleDiedOnDateQueryWithYear_ShouldIncludeYearFilter()
+        {
+            var method = typeof(WikiData).GetMethod(
+                "BuildPeopleOnDateQuery",
+                BindingFlags.NonPublic | BindingFlags.Static,
+                null,
+                new[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(int) },
+                null);
+
+            Assert.IsNotNull(method);
+
+            var query = (string)method!.Invoke(null, new object[] { "P570", 1977, 8, 16, 10 })!;
+
+            Assert.IsTrue(query.Contains("YEAR(?RIP) = 1977"));
+            Assert.IsTrue(query.Contains("MONTH(?RIP) = 8"));
+            Assert.IsTrue(query.Contains("DAY(?RIP) = 16"));
+            Assert.IsTrue(query.Contains("wdt:P570"));
         }
 
         [TestMethod]
