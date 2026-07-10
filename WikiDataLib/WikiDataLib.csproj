@@ -8,7 +8,7 @@
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <Authors>Alexandre Konioukhov</Authors>
     <Company>9386-2399 Québec inc.</Company>
-    <Copyright>Copyright (c) 2020 Alexandre Konioukhov</Copyright>
+    <Copyright>Copyright (c) 2020-2026 Alexandre Konioukhov</Copyright>
     <Description>Library for WikiData access</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/alexan1/WikiDataLib</RepositoryUrl>
@@ -17,7 +17,7 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
