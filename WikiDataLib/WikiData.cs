@@ -204,6 +204,19 @@ namespace WikiDataLib
             return GetPeopleOnDateAsync("P570", "died", month, day, limit, cancellationToken);
         }
 
+        /// <summary>
+        /// Gets people who died on a specific year, month, and day.
+        /// </summary>
+        public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
+            int year,
+            int month,
+            int day,
+            int limit,
+            CancellationToken cancellationToken = default)
+        {
+            return GetPeopleOnDateAsync("P570", "died", year, month, day, limit, cancellationToken);
+        }
+
         private static string BuildSearchQuery(Collection<int> entityIds, string searchPattern)
         {
             var itemValues = string.Join(" ", entityIds.Select(id => $"wd:Q{id}"));
@@ -256,6 +269,45 @@ namespace WikiDataLib
             catch (JsonException ex)
             {
                 throw new JsonException($"Failed to parse WikiData response for people {kind} on {month}/{day}.", ex);
+            }
+        }
+
+        private static async Task<Collection<WikiPerson>> GetPeopleOnDateAsync(
+            string dateProperty,
+            string kind,
+            int year,
+            int month,
+            int day,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            ValidateYearMonthDayLimit(year, month, day, limit);
+
+            var query = BuildPeopleOnDateQuery(dateProperty, year, month, day, limit);
+
+            try
+            {
+                var root = await ExecuteSparqlQueryAsync(query, cancellationToken).ConfigureAwait(false);
+
+                if (!TryGetBindings(root, out var bindings))
+                {
+                    return new Collection<WikiPerson>();
+                }
+
+                var foundPersons = bindings
+                    .EnumerateArray()
+                    .Select(GetPersonFromJsonElement)
+                    .ToList();
+
+                return new Collection<WikiPerson>(foundPersons);
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new HttpRequestException($"Failed to retrieve WikiData people {kind} on {year}/{month}/{day}.", ex);
+            }
+            catch (JsonException ex)
+            {
+                throw new JsonException($"Failed to parse WikiData response for people {kind} on {year}/{month}/{day}.", ex);
             }
         }
 
@@ -320,6 +372,24 @@ namespace WikiDataLib
                 $"}} LIMIT {limit}";
         }
 
+        private static string BuildPeopleOnDateQuery(string dateProperty, int year, int month, int day, int limit)
+        {
+            if (dateProperty != "P570")
+            {
+                throw new ArgumentException("Unsupported date property.", nameof(dateProperty));
+            }
+
+            return "SELECT distinct ?item ?itemLabel ?itemDescription ?DR ?RIP " +
+                "WHERE { " +
+                "?item wdt:P31 wd:Q5. " +
+                "?item wdt:" + dateProperty + " ?date. " +
+                "BIND(?date AS ?RIP) " +
+                $"FILTER(YEAR(?RIP) = {year} && MONTH(?RIP) = {month} && DAY(?RIP) = {day}). " +
+                "OPTIONAL { ?item wdt:P569 ?DR } " +
+                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. } " +
+                $"}} LIMIT {limit}";
+        }
+
         private static void ValidateMonthDayLimit(int month, int day, int limit)
         {
             if (month < 1 || month > 12)
@@ -337,6 +407,16 @@ namespace WikiDataLib
             {
                 throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than 0.");
             }
+        }
+
+        private static void ValidateYearMonthDayLimit(int year, int month, int day, int limit)
+        {
+            if (year <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(year), "Year must be greater than 0.");
+            }
+
+            ValidateMonthDayLimit(month, day, limit);
         }
 
         private static async Task<JsonElement> ExecuteSparqlQueryAsync(string query, CancellationToken cancellationToken)

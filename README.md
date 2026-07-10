@@ -82,10 +82,22 @@ public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
     CancellationToken cancellationToken = default)
 ```
 
+Get people who died on a specific year/month/day.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
+    int year,
+    int month,
+    int day,
+    int limit,
+    CancellationToken cancellationToken = default)
+```
+
 **Examples:**
 ```csharp
 var born = await WikiData.GetPeopleBornOnDateAsync(1, 8, 100);
 var died = await WikiData.GetPeopleDiedOnDateAsync(8, 16, 100);
+var diedIn1977 = await WikiData.GetPeopleDiedOnDateAsync(1977, 8, 16, 100);
 ```
 
 ## WikiPerson Class
