@@ -217,6 +217,19 @@ namespace WikiDataLib
             return GetPeopleOnDateAsync("P570", "died", year, month, day, limit, cancellationToken);
         }
 
+        /// <summary>
+        /// Gets people born on a specific year, month, and day.
+        /// </summary>
+        public static Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
+            int year,
+            int month,
+            int day,
+            int limit,
+            CancellationToken cancellationToken = default)
+        {
+            return GetPeopleOnDateAsync("P569", "born", year, month, day, limit, cancellationToken);
+        }
+
         private static string BuildSearchQuery(Collection<int> entityIds, string searchPattern)
         {
             var itemValues = string.Join(" ", entityIds.Select(id => $"wd:Q{id}"));
@@ -374,7 +387,23 @@ namespace WikiDataLib
 
         private static string BuildPeopleOnDateQuery(string dateProperty, int year, int month, int day, int limit)
         {
-            if (dateProperty != "P570")
+            string requiredDateAssignment;
+            string optionalOtherDateBinding;
+            string dateBinding;
+
+            if (dateProperty == "P569")
+            {
+                requiredDateAssignment = "BIND(?date AS ?DR) ";
+                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P570 ?RIP } ";
+                dateBinding = "?DR";
+            }
+            else if (dateProperty == "P570")
+            {
+                requiredDateAssignment = "BIND(?date AS ?RIP) ";
+                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P569 ?DR } ";
+                dateBinding = "?RIP";
+            }
+            else
             {
                 throw new ArgumentException("Unsupported date property.", nameof(dateProperty));
             }
@@ -383,9 +412,9 @@ namespace WikiDataLib
                 "WHERE { " +
                 "?item wdt:P31 wd:Q5. " +
                 "?item wdt:" + dateProperty + " ?date. " +
-                "BIND(?date AS ?RIP) " +
-                $"FILTER(YEAR(?RIP) = {year} && MONTH(?RIP) = {month} && DAY(?RIP) = {day}). " +
-                "OPTIONAL { ?item wdt:P569 ?DR } " +
+                requiredDateAssignment +
+                $"FILTER(YEAR({dateBinding}) = {year} && MONTH({dateBinding}) = {month} && DAY({dateBinding}) = {day}). " +
+                optionalOtherDateBinding +
                 "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. } " +
                 $"}} LIMIT {limit}";
         }

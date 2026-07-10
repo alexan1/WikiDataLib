@@ -70,6 +70,17 @@ public static Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
     CancellationToken cancellationToken = default)
 ```
 
+Get people born on a specific year/month/day.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
+    int year,
+    int month,
+    int day,
+    int limit,
+    CancellationToken cancellationToken = default)
+```
+
 ### `WikiData.GetPeopleDiedOnDateAsync`
 
 Get people who died on a specific month/day.
@@ -96,6 +107,7 @@ public static Task<Collection<WikiPerson>> GetPeopleDiedOnDateAsync(
 **Examples:**
 ```csharp
 var born = await WikiData.GetPeopleBornOnDateAsync(1, 8, 100);
+var bornIn1815 = await WikiData.GetPeopleBornOnDateAsync(1815, 1, 8, 100);
 var died = await WikiData.GetPeopleDiedOnDateAsync(8, 16, 100);
 var diedIn1977 = await WikiData.GetPeopleDiedOnDateAsync(1977, 8, 16, 100);
 ```
