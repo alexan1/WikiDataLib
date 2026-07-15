@@ -5,6 +5,7 @@
 A .NET library for accessing WikiData from your application. Targets `netstandard2.0` and `net10.0`.
 
 This release (v1.1.9) ensures label lookups fall back to the special "mul" (multiple languages) label when localized labels are missing, and prefers English, French, and Russian before falling back to `mul`. This improves reliability for high-profile entities that use language-agnostic labels (e.g., Q22686).
+The package also includes `WikiApi` for Wikipedia REST API lookups.
 
 Namespace: `WikiDataLib`
 
@@ -57,6 +58,42 @@ var person = await WikiData.GetWikiPersonAsync(303); // Q303 = Elvis Presley
 **Parameters:**
 - `id` — numeric WikiData entity ID, e.g. `303` for `Q303` (throws `ArgumentOutOfRangeException` if ≤ 0)
 - `cancellationToken` — optional cancellation token
+
+### `WikiData.GetWikiPersonAsync(string)`
+
+Get a person summary from Wikipedia by page title.
+
+```csharp
+public static Task<WikiPerson> GetWikiPersonAsync(
+    string wikipediaTitle,
+    CancellationToken cancellationToken = default)
+```
+
+### `WikiApi`
+
+Wikipedia REST API lookups.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetBornOnDateAsync(
+    int month,
+    int day,
+    CancellationToken cancellationToken = default)
+
+public static Task<Collection<WikiPerson>> GetDiedOnDateAsync(
+    int month,
+    int day,
+    CancellationToken cancellationToken = default)
+
+public static Task<Collection<WikiPerson>> GetDiedOnDateAsync(
+    int year,
+    int month,
+    int day,
+    CancellationToken cancellationToken = default)
+
+public static Task<WikiPerson> GetWikiPersonAsync(
+    string wikipediaTitle,
+    CancellationToken cancellationToken = default)
+```
 
 ### `WikiData.GetPeopleBornOnDateAsync`
 

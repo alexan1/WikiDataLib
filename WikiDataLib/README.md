@@ -41,6 +41,10 @@ foreach (var person in people)
 // Get a specific person by WikiData ID (numeric part of Q-identifier)
 var elvis = await WikiData.GetWikiPersonAsync(303); // Q303 = Elvis Presley
 Console.WriteLine($"{elvis.Name} was born on {elvis.Birthday:yyyy-MM-dd}");
+
+// Get a summary directly from Wikipedia by page title
+var summary = await WikiData.GetWikiPersonAsync("Elvis Presley");
+Console.WriteLine(summary.Link);
 ```
 
 ## Advanced Usage
@@ -126,6 +130,42 @@ public static Task<WikiPerson> GetWikiPersonAsync(
 - `HttpRequestException` - When the WikiData API request fails
 - `JsonException` - When the response cannot be parsed
 - `TaskCanceledException` - When the operation is cancelled
+
+### `WikiData.GetWikiPersonAsync(string)`
+
+Gets a person summary from Wikipedia by page title.
+
+```csharp
+public static Task<WikiPerson> GetWikiPersonAsync(
+    string wikipediaTitle,
+    CancellationToken cancellationToken = default)
+```
+
+### `WikiApi`
+
+Wikipedia REST API lookups.
+
+```csharp
+public static Task<Collection<WikiPerson>> GetBornOnDateAsync(
+    int month,
+    int day,
+    CancellationToken cancellationToken = default)
+
+public static Task<Collection<WikiPerson>> GetDiedOnDateAsync(
+    int month,
+    int day,
+    CancellationToken cancellationToken = default)
+
+public static Task<Collection<WikiPerson>> GetDiedOnDateAsync(
+    int year,
+    int month,
+    int day,
+    CancellationToken cancellationToken = default)
+
+public static Task<WikiPerson> GetWikiPersonAsync(
+    string wikipediaTitle,
+    CancellationToken cancellationToken = default)
+```
 
 ### WikiData.GetPeopleBornOnDateAsync
 
