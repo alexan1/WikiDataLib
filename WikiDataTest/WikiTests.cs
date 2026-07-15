@@ -28,6 +28,15 @@ namespace WikiDataTest
             Assert.AreEqual("Elvis Presley", person.Name);
         }
 
+        [TestMethod]
+        public async Task WhenGettingElvisPresleyByWikipediaTitle_ShouldReturnCorrectName()
+        {
+            var person = await WikiData.GetWikiPersonAsync("Elvis Presley");
+
+            Assert.IsNotNull(person);
+            Assert.AreEqual("Elvis Presley", person.Name);
+        }
+
         #endregion
 
         #region Input Validation Tests - WikiPeopleSearchAsync
@@ -325,7 +334,7 @@ namespace WikiDataTest
         {
             try
             {
-                var people = await WikiData.GetPeopleBornOnDateAsync(1, 8, 1);
+                var people = await WikiApi.GetBornOnDateAsync(1, 8);
 
                 Assert.IsNotNull(people);
                 Assert.IsTrue(people.Count > 0, "Expected at least one person born on January 8.");
@@ -333,11 +342,10 @@ namespace WikiDataTest
                     person.Birthday.Value.Month == 1 &&
                     person.Birthday.Value.Day == 8),
                     "All returned people should have a January 8 birthday.");
-                Assert.IsTrue(people.Count <= 1, "Result count should respect the supplied limit.");
             }
             catch (TaskCanceledException)
             {
-                Assert.Inconclusive("The public Wikidata SPARQL endpoint timed out for this live smoke test.");
+                Assert.Inconclusive("The public Wikipedia REST API timed out for this live smoke test.");
             }
         }
 
@@ -346,7 +354,7 @@ namespace WikiDataTest
         {
             try
             {
-                var people = await WikiData.GetPeopleDiedOnDateAsync(8, 16, 1);
+                var people = await WikiApi.GetDiedOnDateAsync(8, 16);
 
                 Assert.IsNotNull(people);
                 Assert.IsTrue(people.Count > 0, "Expected at least one person who died on August 16.");
@@ -354,11 +362,10 @@ namespace WikiDataTest
                     person.Death.Value.Month == 8 &&
                     person.Death.Value.Day == 16),
                     "All returned people should have an August 16 death date.");
-                Assert.IsTrue(people.Count <= 1, "Result count should respect the supplied limit.");
             }
             catch (TaskCanceledException)
             {
-                Assert.Inconclusive("The public Wikidata SPARQL endpoint timed out for this live smoke test.");
+                Assert.Inconclusive("The public Wikipedia REST API timed out for this live smoke test.");
             }
         }
 

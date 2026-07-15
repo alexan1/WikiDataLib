@@ -181,6 +181,14 @@ namespace WikiDataLib
         }
 
         /// <summary>
+        /// Gets a specific person from Wikipedia by their page title.
+        /// </summary>
+        public static Task<WikiPerson> GetWikiPersonAsync(string wikipediaTitle, CancellationToken cancellationToken = default)
+        {
+            return WikiApi.GetWikiPersonAsync(wikipediaTitle, cancellationToken);
+        }
+
+        /// <summary>
         /// Gets people born on a specific month and day.
         /// </summary>
         public static Task<Collection<WikiPerson>> GetPeopleBornOnDateAsync(
@@ -189,7 +197,8 @@ namespace WikiDataLib
             int limit,
             CancellationToken cancellationToken = default)
         {
-            return GetPeopleOnDateAsync("P569", "born", month, day, limit, cancellationToken);
+            ValidateMonthDayLimit(month, day, limit);
+            return TrimResultsAsync(WikiApi.GetBornOnDateAsync(month, day, cancellationToken), limit);
         }
 
         /// <summary>
@@ -201,7 +210,8 @@ namespace WikiDataLib
             int limit,
             CancellationToken cancellationToken = default)
         {
-            return GetPeopleOnDateAsync("P570", "died", month, day, limit, cancellationToken);
+            ValidateMonthDayLimit(month, day, limit);
+            return TrimResultsAsync(WikiApi.GetDiedOnDateAsync(month, day, cancellationToken), limit);
         }
 
         /// <summary>
@@ -214,7 +224,8 @@ namespace WikiDataLib
             int limit,
             CancellationToken cancellationToken = default)
         {
-            return GetPeopleOnDateAsync("P570", "died", year, month, day, limit, cancellationToken);
+            ValidateYearMonthDayLimit(year, month, day, limit);
+            return TrimResultsAsync(WikiApi.GetDiedOnDateAsync(year, month, day, cancellationToken), limit);
         }
 
         /// <summary>
@@ -227,7 +238,16 @@ namespace WikiDataLib
             int limit,
             CancellationToken cancellationToken = default)
         {
-            return GetPeopleOnDateAsync("P569", "born", year, month, day, limit, cancellationToken);
+            ValidateYearMonthDayLimit(year, month, day, limit);
+            return TrimResultsAsync(WikiApi.GetBornOnDateAsync(year, month, day, cancellationToken), limit);
+        }
+
+        private static async Task<Collection<WikiPerson>> TrimResultsAsync(
+            Task<Collection<WikiPerson>> peopleTask,
+            int limit)
+        {
+            var people = await peopleTask.ConfigureAwait(false);
+            return new Collection<WikiPerson>(people.Take(limit).ToList());
         }
 
         private static string BuildSearchQuery(Collection<int> entityIds, string searchPattern)
