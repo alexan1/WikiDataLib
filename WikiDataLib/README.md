@@ -151,6 +151,12 @@ public static Task<Collection<WikiPerson>> GetBornOnDateAsync(
     int day,
     CancellationToken cancellationToken = default)
 
+public static Task<Collection<WikiPerson>> GetBornOnDateAsync(
+    int year,
+    int month,
+    int day,
+    CancellationToken cancellationToken = default)
+
 public static Task<Collection<WikiPerson>> GetDiedOnDateAsync(
     int month,
     int day,
