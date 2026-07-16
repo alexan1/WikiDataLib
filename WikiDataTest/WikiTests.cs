@@ -37,6 +37,22 @@ namespace WikiDataTest
             Assert.AreEqual("Elvis Presley", person.Name);
         }
 
+        [DataTestMethod]
+        [DataRow("")]
+        [DataRow("   ")]
+        public async Task WhenGettingPersonByWikipediaTitle_IsEmptyOrWhitespace_ShouldThrowArgumentException(string wikipediaTitle)
+        {
+            await Assert.ThrowsExceptionAsync<ArgumentException>(
+                async () => await WikiData.GetWikiPersonAsync(wikipediaTitle));
+        }
+
+        [TestMethod]
+        public async Task WhenGettingPersonByWikipediaTitle_IsNull_ShouldThrowArgumentException()
+        {
+            await Assert.ThrowsExceptionAsync<ArgumentException>(
+                async () => await WikiData.GetWikiPersonAsync(null!));
+        }
+
         #endregion
 
         #region Input Validation Tests - WikiPeopleSearchAsync
