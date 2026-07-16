@@ -372,10 +372,12 @@ namespace WikiDataTest
         {
             try
             {
-                var people = await WikiApi.GetDiedOnDateAsync(8, 16);
+                const int limit = 50;
+                var people = await WikiData.GetPeopleDiedOnDateAsync(8, 16, limit);
 
                 Assert.IsNotNull(people);
                 Assert.IsTrue(people.Count > 0, "Expected at least one person who died on August 16.");
+                Assert.IsTrue(people.Count <= limit, $"Expected at most {limit} results.");
                 Assert.IsTrue(people.All(person => person.Death.HasValue &&
                     person.Death.Value.Month == 8 &&
                     person.Death.Value.Day == 16),
