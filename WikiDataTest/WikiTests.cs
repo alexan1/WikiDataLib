@@ -350,10 +350,12 @@ namespace WikiDataTest
         {
             try
             {
-                var people = await WikiApi.GetBornOnDateAsync(1, 8);
+                const int limit = 50;
+                var people = await WikiData.GetPeopleBornOnDateAsync(1, 8, limit);
 
                 Assert.IsNotNull(people);
                 Assert.IsTrue(people.Count > 0, "Expected at least one person born on January 8.");
+                Assert.IsTrue(people.Count <= limit, $"Expected at most {limit} results.");
                 Assert.IsTrue(people.All(person => person.Birthday.HasValue &&
                     person.Birthday.Value.Month == 1 &&
                     person.Birthday.Value.Day == 8),
