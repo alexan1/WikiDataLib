@@ -376,6 +376,12 @@ namespace WikiDataLib
                         using (var doc = JsonDocument.Parse(json))
                         {
                             var result = doc.RootElement.Clone();
+
+                            if (_cache.Count >= 256)
+                            {
+                                _cache.Clear();
+                            }
+
                             _cache.TryAdd(url, result);
                             return result;
                         }
