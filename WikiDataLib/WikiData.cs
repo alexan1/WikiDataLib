@@ -557,7 +557,7 @@ namespace WikiDataLib
             var description = ExtractStringProperty(item, FieldItemDescription);
             var birthday = ExtractDateProperty(item, FieldBirthDate);
             var death = ExtractDateProperty(item, FieldDeathDate);
-            var image = ExtractStringProperty(item, FieldImage);
+            var image = NormalizeCommonsImageUrl(ExtractStringProperty(item, FieldImage));
             var link = ExtractStringProperty(item, FieldArticle);
 
             return new WikiPerson
@@ -570,6 +570,38 @@ namespace WikiDataLib
                 Image = image,
                 Link = link
             };
+        }
+
+        internal static string? NormalizeCommonsImageUrl(string? imageUrl)
+        {
+            if (string.IsNullOrWhiteSpace(imageUrl))
+            {
+                return imageUrl;
+            }
+
+            if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri))
+            {
+                return imageUrl;
+            }
+
+            const string commonsHost = "commons.wikimedia.org";
+            const string specialFilePathPrefix = "/wiki/Special:FilePath/";
+
+            if (!commonsHost.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) ||
+                !uri.AbsolutePath.StartsWith(specialFilePathPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return imageUrl;
+            }
+
+            var fileNameEncoded = uri.AbsolutePath.Substring(specialFilePathPrefix.Length);
+            var fileName = Uri.UnescapeDataString(fileNameEncoded);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return imageUrl;
+            }
+
+            var querySuffix = string.IsNullOrEmpty(uri.Query) ? string.Empty : uri.Query;
+            return $"https://commons.wikimedia.org/wiki/Special:Redirect/file/{Uri.EscapeDataString(fileName)}{querySuffix}";
         }
 
         private static int ExtractId(JsonElement item)

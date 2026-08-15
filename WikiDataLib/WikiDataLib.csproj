@@ -24,6 +24,12 @@
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>WikiDataTest</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <!-- System.Text.Json is built into net10.0+; only needed for netstandard2.0.
        v8.0.5 is used (not v5.0.0) because it supports netstandard2.0 and fixes
        the critical vulnerability in System.Text.Encodings.Web present in v5.0.0. -->
