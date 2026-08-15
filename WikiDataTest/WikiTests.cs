@@ -346,16 +346,21 @@ namespace WikiDataTest
         }
 
         [TestMethod]
-        public void WhenNormalizingSpecialFilePathImage_ShouldResolveCommonsThumbnailUrl()
+        public void WhenNormalizingWikidataSpecialFilePathImage_ShouldResolveCommonsThumbnailUrl()
         {
-            var source = "https://commons.wikimedia.org/wiki/Special:FilePath/Example.svg";
-            var normalized = typeof(WikiData).Assembly
-                .GetType("WikiDataLib.WikiApi")!
-                .GetMethod("NormalizeThumbnailSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg?width=330";
+            var result = WikiData.NormalizeCommonsImageUrl(source);
 
-            var result = (string?)normalized.Invoke(null, new object?[] { source });
+            Assert.AreEqual("https://commons.wikimedia.org/wiki/Special:Redirect/file/Foo%20Bar.jpg?width=330", result);
+        }
 
-            Assert.AreEqual("https://commons.wikimedia.org/wiki/Special:Redirect/file/Example.svg", result);
+        [TestMethod]
+        public void WhenNormalizingNonSpecialFilePathImage_ShouldKeepOriginalValue()
+        {
+            var source = "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg";
+            var result = WikiData.NormalizeCommonsImageUrl(source);
+
+            Assert.AreEqual(source, result);
         }
 
         [TestMethod]
