@@ -258,10 +258,33 @@ namespace WikiDataLib
             if (item.TryGetProperty("thumbnail", out var thumbnail) &&
                 thumbnail.TryGetProperty("source", out var source))
             {
-                return source.GetString();
+                var sourceValue = source.GetString();
+                return NormalizeThumbnailSource(sourceValue);
             }
 
             return null;
+        }
+
+        private static string? NormalizeThumbnailSource(string? source)
+        {
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                return source;
+            }
+
+            const string specialFilePathPrefix = "https://commons.wikimedia.org/wiki/Special:FilePath/";
+            if (source.StartsWith(specialFilePathPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var fileName = Uri.UnescapeDataString(source.Substring(specialFilePathPrefix.Length));
+                if (string.IsNullOrWhiteSpace(fileName))
+                {
+                    return source;
+                }
+
+                return $"https://commons.wikimedia.org/wiki/Special:Redirect/file/{Uri.EscapeDataString(fileName)}";
+            }
+
+            return source;
         }
 
         private static string? ExtractPageUrl(JsonElement item)
