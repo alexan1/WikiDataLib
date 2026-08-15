@@ -346,6 +346,19 @@ namespace WikiDataTest
         }
 
         [TestMethod]
+        public void WhenNormalizingSpecialFilePathImage_ShouldResolveCommonsThumbnailUrl()
+        {
+            var source = "https://commons.wikimedia.org/wiki/Special:FilePath/Example.svg";
+            var normalized = typeof(WikiData).Assembly
+                .GetType("WikiDataLib.WikiApi")!
+                .GetMethod("NormalizeThumbnailSource", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+
+            var result = (string?)normalized.Invoke(null, new object?[] { source });
+
+            Assert.AreEqual("https://commons.wikimedia.org/wiki/Special:Redirect/file/Example.svg", result);
+        }
+
+        [TestMethod]
         public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays()
         {
             try
