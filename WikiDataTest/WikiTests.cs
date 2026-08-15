@@ -364,6 +364,24 @@ namespace WikiDataTest
         }
 
         [TestMethod]
+        public void WhenNormalizingWikiApiSpecialFilePathImage_ShouldResolveCommonsThumbnailUrl()
+        {
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg?width=330";
+            var result = WikiApi.NormalizeThumbnailSource(source);
+
+            Assert.AreEqual("https://commons.wikimedia.org/wiki/Special:Redirect/file/Foo%20Bar.jpg?width=330", result);
+        }
+
+        [TestMethod]
+        public void WhenNormalizingWikiApiNonSpecialFilePathImage_ShouldKeepOriginalValue()
+        {
+            var source = "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg";
+            var result = WikiApi.NormalizeThumbnailSource(source);
+
+            Assert.AreEqual(source, result);
+        }
+
+        [TestMethod]
         public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays()
         {
             try
