@@ -265,26 +265,36 @@ namespace WikiDataLib
             return null;
         }
 
-        private static string? NormalizeThumbnailSource(string? source)
+        internal static string? NormalizeThumbnailSource(string? source)
         {
             if (string.IsNullOrWhiteSpace(source))
             {
                 return source;
             }
 
-            const string specialFilePathPrefix = "https://commons.wikimedia.org/wiki/Special:FilePath/";
-            if (source.StartsWith(specialFilePathPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!Uri.TryCreate(source, UriKind.Absolute, out var uri))
             {
-                var fileName = Uri.UnescapeDataString(source.Substring(specialFilePathPrefix.Length));
-                if (string.IsNullOrWhiteSpace(fileName))
-                {
-                    return source;
-                }
-
-                return $"https://commons.wikimedia.org/wiki/Special:Redirect/file/{Uri.EscapeDataString(fileName)}";
+                return source;
             }
 
-            return source;
+            const string commonsHost = "commons.wikimedia.org";
+            const string specialFilePathPrefix = "/wiki/Special:FilePath/";
+
+            if (!commonsHost.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) ||
+                !uri.AbsolutePath.StartsWith(specialFilePathPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return source;
+            }
+
+            var fileNameEncoded = uri.AbsolutePath.Substring(specialFilePathPrefix.Length);
+            var fileName = Uri.UnescapeDataString(fileNameEncoded);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return source;
+            }
+
+            var querySuffix = string.IsNullOrEmpty(uri.Query) ? string.Empty : uri.Query;
+            return $"https://commons.wikimedia.org/wiki/Special:Redirect/file/{Uri.EscapeDataString(fileName)}{querySuffix}";
         }
 
         private static string? ExtractPageUrl(JsonElement item)
