@@ -249,7 +249,7 @@ public class WikiPerson
 - `Description` - Short description of the person (nullable)
 - `Birthday` - Date of birth (nullable)
 - `Death` - Date of death (nullable, null if still alive or unknown)
-- `Image` - URL to person's image (nullable)
+- `Image` - Direct `upload.wikimedia.org` URL to person's image (nullable)
 - `Link` - Wikipedia article URL (nullable)
 
 ## Migration Guide (v1.1.3 → v1.1.4)
@@ -384,6 +384,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Issues**: https://github.com/alexan1/WikiDataLib/issues
 
 ## Changelog
+
+### v1.3.0
+- `Image` field on `WikiPerson` now returns a direct `upload.wikimedia.org` URL resolved via the Commons `imageinfo` API, eliminating the `commons.wikimedia.org` redirect hop that caused image load failures under certain browser extensions (e.g. uBlock Origin in Edge)
+- Image URLs are batch-resolved in a single API call per search or date-feed request, minimising round-trips
 
 ### v1.1.8 (Current)
 - Fixed browser-based `WikiPeopleSearchAsync` calls by enabling CORS on the MediaWiki search request
