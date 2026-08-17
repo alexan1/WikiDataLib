@@ -4,8 +4,7 @@
 
 A .NET library for accessing WikiData from your application. Targets `netstandard2.0` and `net10.0`.
 
-This release (v1.1.9) ensures label lookups fall back to the special "mul" (multiple languages) label when localized labels are missing, and prefers English, French, and Russian before falling back to `mul`. This improves reliability for high-profile entities that use language-agnostic labels (e.g., Q22686).
-The package also includes `WikiApi` for Wikipedia REST API lookups.
+The `Image` field on `WikiPerson` is now resolved to a direct `upload.wikimedia.org` URL via the Commons `imageinfo` API, eliminating the `commons.wikimedia.org` redirect hop that caused image load failures under certain browser extensions (e.g. uBlock Origin in Edge). Image URLs returned by both `WikiData` and `WikiApi` methods are affected.
 
 Namespace: `WikiDataLib`
 
@@ -165,7 +164,7 @@ public class WikiPerson
     public string? Description { get; set; }
     public DateTime? Birthday { get; set; }
     public DateTime? Death { get; set; }
-    public string? Image { get; set; }   // URL to image
+    public string? Image { get; set; }   // Direct upload.wikimedia.org URL to image
     public string? Link { get; set; }    // English Wikipedia URL
 }
 ```
