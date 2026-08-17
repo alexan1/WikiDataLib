@@ -4,6 +4,8 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
@@ -524,7 +526,53 @@ namespace WikiDataLib
             }
 
             var querySuffix = string.IsNullOrEmpty(uri.Query) ? string.Empty : uri.Query;
-            return $"https://commons.wikimedia.org/wiki/Special:Redirect/file/{Uri.EscapeDataString(fileName)}{querySuffix}";
+            return BuildDirectUploadUrl(fileName, querySuffix);
+        }
+
+        // Builds a direct upload.wikimedia.org URL, bypassing any commons.wikimedia.org redirect.
+        // Wikimedia stores files under /wikipedia/commons/{md5[0]}/{md5[0..1]}/{filename}.
+        // When a ?width=N param is present the thumbnail path is used instead.
+        internal static string BuildDirectUploadUrl(string fileName, string querySuffix)
+        {
+            var normalized = fileName.Replace(' ', '_');
+            string hash;
+            using (var md5 = MD5.Create())
+            {
+                var bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(normalized));
+                hash = BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
+            }
+            var a = hash.Substring(0, 1);
+            var ab = hash.Substring(0, 2);
+            var encodedName = Uri.EscapeDataString(normalized);
+
+            var widthValue = ExtractWidthFromQuery(querySuffix);
+            if (widthValue != null)
+            {
+                return $"https://upload.wikimedia.org/wikipedia/commons/thumb/{a}/{ab}/{encodedName}/{widthValue}px-{encodedName}";
+            }
+
+            return $"https://upload.wikimedia.org/wikipedia/commons/{a}/{ab}/{encodedName}";
+        }
+
+        // Parses ?width=N or &width=N from a raw query string (e.g. "?width=330").
+        // Returns the numeric string if present, otherwise null.
+        private static string? ExtractWidthFromQuery(string querySuffix)
+        {
+            if (string.IsNullOrEmpty(querySuffix))
+                return null;
+            var q = querySuffix.TrimStart('?');
+            foreach (var pair in q.Split('&'))
+            {
+                var eq = pair.IndexOf('=');
+                if (eq < 0) continue;
+                var key = pair.Substring(0, eq);
+                if (string.Equals(key, "width", StringComparison.OrdinalIgnoreCase))
+                {
+                    var val = pair.Substring(eq + 1);
+                    return string.IsNullOrEmpty(val) ? null : val;
+                }
+            }
+            return null;
         }
 
         private static int ExtractId(JsonElement item)
