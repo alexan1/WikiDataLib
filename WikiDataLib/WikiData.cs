@@ -83,10 +83,20 @@ namespace WikiDataLib
                     .Select((id, index) => new { id, index })
                     .ToDictionary(item => item.id, item => item.index);
 
+                // Collect all raw image URLs, batch-resolve them in a single API call, then
+                // build persons synchronously using the pre-resolved map.
+                var bindingList = bindings.EnumerateArray().ToList();
+                var rawImageUrls = bindingList.Select(b => ExtractStringProperty(b, FieldImage)).ToList();
+                var resolvedImages = await WikiApi.ResolveCommonsFileUrlsBatchAsync(rawImageUrls, cancellationToken).ConfigureAwait(false);
+
                 var foundPersons = new System.Collections.Generic.List<WikiPerson>();
-                foreach (var binding in bindings.EnumerateArray())
+                foreach (var binding in bindingList)
                 {
-                    var person = await GetPersonFromJsonElementAsync(binding, cancellationToken).ConfigureAwait(false);
+                    var rawImage = ExtractStringProperty(binding, FieldImage);
+                    string? resolvedImage = null;
+                    if (rawImage != null) resolvedImages.TryGetValue(rawImage, out resolvedImage);
+
+                    var person = GetPersonFromJsonElement(binding, resolvedImage ?? rawImage);
                     if (person.Name != null && Regex.IsMatch(person.Name, searchPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
                     {
                         foundPersons.Add(person);
@@ -175,7 +185,9 @@ namespace WikiDataLib
                 }
 
                 var item = bindings[0];
-                var person = await GetPersonFromJsonElementAsync(item, cancellationToken).ConfigureAwait(false);
+                var rawImage = ExtractStringProperty(item, FieldImage);
+                var resolvedImage = await WikiApi.ResolveCommonsFileUrlAsync(rawImage, cancellationToken).ConfigureAwait(false);
+                var person = GetPersonFromJsonElement(item, resolvedImage ?? rawImage);
 
                 return person;
             }
@@ -482,25 +494,17 @@ namespace WikiDataLib
             return true;
         }
 
-        private static async Task<WikiPerson> GetPersonFromJsonElementAsync(JsonElement item, CancellationToken cancellationToken)
+        private static WikiPerson GetPersonFromJsonElement(JsonElement item, string? resolvedImageUrl)
         {
-            var id = ExtractId(item);
-            var name = ExtractStringProperty(item, FieldItemLabel);
-            var description = ExtractStringProperty(item, FieldItemDescription);
-            var birthday = ExtractDateProperty(item, FieldBirthDate);
-            var death = ExtractDateProperty(item, FieldDeathDate);
-            var image = await WikiApi.ResolveCommonsFileUrlAsync(ExtractStringProperty(item, FieldImage), cancellationToken).ConfigureAwait(false);
-            var link = ExtractStringProperty(item, FieldArticle);
-
             return new WikiPerson
             {
-                Id = id,
-                Name = name,
-                Description = description,
-                Birthday = birthday,
-                Death = death,
-                Image = image,
-                Link = link
+                Id = ExtractId(item),
+                Name = ExtractStringProperty(item, FieldItemLabel),
+                Description = ExtractStringProperty(item, FieldItemDescription),
+                Birthday = ExtractDateProperty(item, FieldBirthDate),
+                Death = ExtractDateProperty(item, FieldDeathDate),
+                Image = resolvedImageUrl,
+                Link = ExtractStringProperty(item, FieldArticle)
             };
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,17 +19,30 @@ namespace WikiDataLib
         private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36";
         private const int MaxRetryAttempts = 3;
 
-        private static readonly HttpClient _httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(30)
-        };
+        private static HttpClient _httpClient = CreateHttpClient(null);
 
         private static readonly ConcurrentDictionary<string, JsonElement> _cache =
             new ConcurrentDictionary<string, JsonElement>();
 
         static WikiApi()
         {
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        }
+
+        private static HttpClient CreateHttpClient(HttpMessageHandler? handler)
+        {
+            var client = handler != null
+                ? new HttpClient(handler, disposeHandler: false)
+                : new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+            return client;
+        }
+
+        // Replaces the HTTP handler used for all requests — intended for unit tests only.
+        internal static void SetHttpMessageHandlerForTesting(HttpMessageHandler? handler)
+        {
+            _httpClient = CreateHttpClient(handler);
+            _cache.Clear();
         }
 
         /// <summary>
@@ -135,25 +149,36 @@ namespace WikiDataLib
                     return new Collection<WikiPerson>();
                 }
 
-                var people = new Collection<WikiPerson>();
-
+                // Collect all candidate pages before any network call.
+                var pageEntries = new System.Collections.Generic.List<(JsonElement Page, int Year)>();
                 foreach (var item in events.EnumerateArray())
                 {
                     var year = ExtractIntProperty(item, "year");
                     if (yearFilter.HasValue && year != yearFilter.Value)
-                    {
                         continue;
-                    }
 
                     if (!item.TryGetProperty("pages", out var pages) || pages.ValueKind != JsonValueKind.Array)
-                    {
                         continue;
-                    }
 
                     foreach (var page in pages.EnumerateArray())
-                    {
-                        people.Add(await BuildPersonFromPageAsync(page, month, day, year, eventType, cancellationToken).ConfigureAwait(false));
-                    }
+                        pageEntries.Add((page, year));
+                }
+
+                // Batch-resolve all Commons thumbnail URLs in a single API call.
+                var thumbnailSources = pageEntries
+                    .Select(e => ExtractRawThumbnailSource(e.Page))
+                    .ToList();
+                var resolvedThumbnails = await ResolveCommonsFileUrlsBatchAsync(thumbnailSources, cancellationToken).ConfigureAwait(false);
+
+                var people = new Collection<WikiPerson>();
+                foreach (var entry in pageEntries)
+                {
+                    var rawThumb = ExtractRawThumbnailSource(entry.Page);
+                    string? resolvedThumb = null;
+                    if (rawThumb != null)
+                        resolvedThumbnails.TryGetValue(rawThumb, out resolvedThumb);
+
+                    people.Add(BuildPersonFromPage(entry.Page, month, day, entry.Year, eventType, resolvedThumb));
                 }
 
                 return people;
@@ -170,24 +195,26 @@ namespace WikiDataLib
 
         private static async Task<WikiPerson> BuildPersonFromSummaryAsync(JsonElement root, CancellationToken cancellationToken)
         {
+            var rawThumb = ExtractRawThumbnailSource(root);
+            var resolvedThumb = await ResolveCommonsFileUrlAsync(rawThumb, cancellationToken).ConfigureAwait(false);
             return new WikiPerson
             {
                 Id = ExtractWikiEntityId(root),
                 Name = ExtractNormalizedTitle(root),
                 Description = ExtractStringProperty(root, "description"),
-                Image = await ExtractThumbnailSourceAsync(root, cancellationToken).ConfigureAwait(false),
+                Image = resolvedThumb,
                 Link = ExtractPageUrl(root)
             };
         }
 
-        private static async Task<WikiPerson> BuildPersonFromPageAsync(JsonElement page, int month, int day, int year, string eventType, CancellationToken cancellationToken)
+        private static WikiPerson BuildPersonFromPage(JsonElement page, int month, int day, int year, string eventType, string? resolvedThumb)
         {
             var person = new WikiPerson
             {
                 Id = ExtractWikiEntityId(page),
                 Name = ExtractNormalizedTitle(page),
                 Description = ExtractStringProperty(page, "description"),
-                Image = await ExtractThumbnailSourceAsync(page, cancellationToken).ConfigureAwait(false),
+                Image = resolvedThumb,
                 Link = ExtractPageUrl(page)
             };
 
@@ -202,6 +229,18 @@ namespace WikiDataLib
             }
 
             return person;
+        }
+
+        // Extracts the raw thumbnail source URL from a page element without any resolution.
+        private static string? ExtractRawThumbnailSource(JsonElement item)
+        {
+            if (item.TryGetProperty("thumbnail", out var thumbnail) &&
+                thumbnail.TryGetProperty("source", out var source))
+            {
+                return source.GetString();
+            }
+
+            return null;
         }
 
         private static int ExtractWikiEntityId(JsonElement item)
@@ -253,93 +292,153 @@ namespace WikiDataLib
             return property.GetString();
         }
 
-        private static async Task<string?> ExtractThumbnailSourceAsync(JsonElement item, CancellationToken cancellationToken)
-        {
-            if (item.TryGetProperty("thumbnail", out var thumbnail) &&
-                thumbnail.TryGetProperty("source", out var source))
-            {
-                var sourceValue = source.GetString();
-                return await ResolveCommonsFileUrlAsync(sourceValue, cancellationToken).ConfigureAwait(false);
-            }
-
-            return null;
-        }
-
-        // Resolves a commons.wikimedia.org Special:FilePath URL to a direct upload.wikimedia.org URL
-        // by calling the Commons imageinfo API, which handles all filename normalization, redirects,
-        // and hashing server-side. Non-Commons URLs are returned unchanged.
+        // Resolves a single commons.wikimedia.org Special:FilePath URL via the imageinfo API.
+        // Used for single-person lookups; use ResolveCommonsFileUrlsBatchAsync for collections.
         internal static async Task<string?> ResolveCommonsFileUrlAsync(string? source, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(source))
-            {
                 return source;
-            }
 
-            if (!Uri.TryCreate(source, UriKind.Absolute, out var uri))
-            {
-                return source;
-            }
+            var batch = new System.Collections.Generic.List<string?> { source };
+            var result = await ResolveCommonsFileUrlsBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+            return result.TryGetValue(source, out var resolved) ? resolved : source;
+        }
 
+        // Resolves a collection of commons.wikimedia.org Special:FilePath URLs to direct
+        // upload.wikimedia.org URLs via the Commons imageinfo API (one call per unique width value,
+        // with up to 50 pipe-separated titles per call). Non-Commons URLs pass through unchanged.
+        // Returns a dictionary keyed by the original source URL.
+        internal static async Task<System.Collections.Generic.IReadOnlyDictionary<string, string?>> ResolveCommonsFileUrlsBatchAsync(
+            System.Collections.Generic.IEnumerable<string?> sources,
+            CancellationToken cancellationToken)
+        {
             const string commonsHost = "commons.wikimedia.org";
             const string specialFilePathPrefix = "/wiki/Special:FilePath/";
+            const int maxTitlesPerCall = 50;
 
-            if (!commonsHost.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) ||
-                !uri.AbsolutePath.StartsWith(specialFilePathPrefix, StringComparison.OrdinalIgnoreCase))
+            var result = new System.Collections.Generic.Dictionary<string, string?>(StringComparer.Ordinal);
+
+            // Group Commons FilePath URLs by their ?width param. Other URLs pass through.
+            // titleToSource: "File:Name" → original source URL, grouped by width.
+            // Empty string "" is the sentinel key for "no width specified".
+            var byWidth = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.Dictionary<string, string>>(StringComparer.Ordinal);
+
+            foreach (var source in sources)
             {
-                return source;
-            }
+                if (source == null) continue;
+                if (result.ContainsKey(source)) continue; // deduplicate
+                result[source] = source; // default: pass through unchanged
 
-            var fileNameEncoded = uri.AbsolutePath.Substring(specialFilePathPrefix.Length);
-            var fileName = Uri.UnescapeDataString(fileNameEncoded);
-            if (string.IsNullOrWhiteSpace(fileName))
-            {
-                return source;
-            }
+                if (!Uri.TryCreate(source, UriKind.Absolute, out var uri)) continue;
+                if (!commonsHost.Equals(uri.Host, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!uri.AbsolutePath.StartsWith(specialFilePathPrefix, StringComparison.OrdinalIgnoreCase)) continue;
 
-            var widthParam = ExtractWidthFromQuery(uri.Query);
-            var apiUrl = widthParam != null
-                ? $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{Uri.EscapeDataString(fileName)}&prop=imageinfo&iiprop=url&iiurlwidth={widthParam}&format=json"
-                : $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{Uri.EscapeDataString(fileName)}&prop=imageinfo&iiprop=url&format=json";
+                var fileNameEncoded = uri.AbsolutePath.Substring(specialFilePathPrefix.Length);
+                var fileName = Uri.UnescapeDataString(fileNameEncoded);
+                if (string.IsNullOrWhiteSpace(fileName)) continue;
 
-            try
-            {
-                var root = await ExecuteJsonRequestAsync(apiUrl, cancellationToken).ConfigureAwait(false);
-
-                if (root.TryGetProperty("query", out var query) &&
-                    query.TryGetProperty("pages", out var pages))
+                // Use empty string as sentinel for "no width"; real width values are never empty.
+                var widthKey = ExtractWidthFromQuery(uri.Query) ?? string.Empty;
+                if (!byWidth.TryGetValue(widthKey, out var group))
                 {
-                    foreach (var page in pages.EnumerateObject())
+                    group = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    byWidth[widthKey] = group;
+                }
+                group["File:" + fileName] = source;
+            }
+
+            foreach (var widthGroup in byWidth)
+            {
+                // Restore null for "no width" to control the API URL shape.
+                var widthParam = widthGroup.Key.Length > 0 ? widthGroup.Key : null;
+                var titleToSource = widthGroup.Value;
+
+                // Chunk into batches of maxTitlesPerCall to stay within API limits.
+                var titleList = new System.Collections.Generic.List<string>(titleToSource.Keys);
+                for (var offset = 0; offset < titleList.Count; offset += maxTitlesPerCall)
+                {
+                    var chunk = titleList.GetRange(offset, Math.Min(maxTitlesPerCall, titleList.Count - offset));
+
+                    // Pipe-separate titles; encode each filename but keep | as literal separator.
+                    var titlesParam = string.Join("|", chunk.Select(t => Uri.EscapeDataString(t)));
+                    var apiUrl = widthParam != null
+                        ? $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&iiurlwidth={widthParam}&format=json"
+                        : $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&format=json";
+
+                    try
                     {
-                        // Skip missing files (page key "-1")
-                        if (page.Value.TryGetProperty("missing", out _))
-                        {
-                            continue;
-                        }
-
-                        if (page.Value.TryGetProperty("imageinfo", out var imageinfo) &&
-                            imageinfo.GetArrayLength() > 0)
-                        {
-                            var info = imageinfo[0];
-                            // When iiurlwidth is set, Wikimedia returns thumburl; otherwise url.
-                            var urlProp = widthParam != null && info.TryGetProperty("thumburl", out var thumbUrl)
-                                ? thumbUrl.GetString()
-                                : info.TryGetProperty("url", out var fullUrl) ? fullUrl.GetString() : null;
-
-                            if (!string.IsNullOrWhiteSpace(urlProp))
-                            {
-                                // Strip Wikimedia UTM tracking params Wikimedia appends to imageinfo URLs.
-                                return StripQueryParams(urlProp, "utm_source", "utm_campaign", "utm_content");
-                            }
-                        }
+                        var root = await ExecuteJsonRequestAsync(apiUrl, cancellationToken).ConfigureAwait(false);
+                        ParseImageInfoResponse(root, widthParam, titleToSource, result);
+                    }
+                    catch (Exception ex) when (ex is HttpRequestException || ex is JsonException || ex is InvalidOperationException)
+                    {
+                        // Leave this chunk's entries at their default (original URL) passthrough.
                     }
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException || ex is JsonException || ex is InvalidOperationException)
+
+            return result;
+        }
+
+        // Parses one imageinfo API response page and writes resolved URLs into `result`.
+        private static void ParseImageInfoResponse(
+            JsonElement root,
+            string? widthParam,
+            System.Collections.Generic.Dictionary<string, string> titleToSource,
+            System.Collections.Generic.Dictionary<string, string?> result)
+        {
+            if (!root.TryGetProperty("query", out var query)) return;
+
+            // The `normalized` array maps from the title we sent → the canonical title the API used.
+            // We need this to look up results when the API normalizes our input title.
+            var normalizedMap = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (query.TryGetProperty("normalized", out var normalized))
             {
-                // Fall back to the original URL rather than silently breaking image display.
+                foreach (var n in normalized.EnumerateArray())
+                {
+                    if (n.TryGetProperty("from", out var from) && n.TryGetProperty("to", out var to))
+                    {
+                        var fromStr = from.GetString();
+                        var toStr = to.GetString();
+                        if (fromStr != null && toStr != null)
+                            normalizedMap[toStr] = fromStr; // canonical title → our sent title
+                    }
+                }
             }
 
-            return source;
+            if (!query.TryGetProperty("pages", out var pages)) return;
+
+            foreach (var page in pages.EnumerateObject())
+            {
+                if (page.Value.TryGetProperty("missing", out _)) continue;
+                if (!page.Value.TryGetProperty("title", out var titleProp)) continue;
+
+                var pageTitle = titleProp.GetString();
+                if (pageTitle == null) continue;
+
+                // Find the original source URL: try direct match, then via normalized map.
+                if (!titleToSource.TryGetValue(pageTitle, out var originalSource))
+                {
+                    if (!normalizedMap.TryGetValue(pageTitle, out var sentTitle) ||
+                        !titleToSource.TryGetValue(sentTitle, out originalSource))
+                        continue;
+                }
+
+                if (!page.Value.TryGetProperty("imageinfo", out var imageinfo) || imageinfo.GetArrayLength() == 0)
+                    continue;
+
+                var info = imageinfo[0];
+                string? urlProp;
+                if (widthParam != null && info.TryGetProperty("thumburl", out var thumbUrl))
+                    urlProp = thumbUrl.GetString();
+                else if (info.TryGetProperty("url", out var fullUrl))
+                    urlProp = fullUrl.GetString();
+                else
+                    urlProp = null;
+
+                if (!string.IsNullOrWhiteSpace(urlProp))
+                    result[originalSource] = StripQueryParams(urlProp, "utm_source", "utm_campaign", "utm_content");
+            }
         }
 
         // Parses ?width=N or &width=N from a raw query string (e.g. "?width=330").

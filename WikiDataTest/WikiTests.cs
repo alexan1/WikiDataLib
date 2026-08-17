@@ -2,8 +2,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using WikiDataLib;
 using System;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace WikiDataTest
 {
@@ -381,6 +385,119 @@ namespace WikiDataTest
             Assert.AreEqual("", await WikiApi.ResolveCommonsFileUrlAsync("", CancellationToken.None));
         }
 
+        #endregion
+
+        #region Unit Tests - URL Resolution (mocked HTTP)
+
+        [TestCleanup]
+        public void ResetHttpHandler()
+        {
+            WikiApi.SetHttpMessageHandlerForTesting(null);
+        }
+
+        [TestMethod]
+        public async Task WhenResolvingCommonsUrl_ImageinfoReturnsUrl_ShouldReturnCleanUploadUrl()
+        {
+            var json = @"{""query"":{""pages"":{""123"":{""title"":""File:Elvis Presley promoting Jailhouse Rock.jpg"",
+                ""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original""}]}}}}";
+            WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => json));
+
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Elvis%20Presley%20promoting%20Jailhouse%20Rock.jpg";
+            var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
+
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg", result);
+        }
+
+        [TestMethod]
+        public async Task WhenResolvingCommonsUrlWithWidth_ImageinfoReturnsThumburl_ShouldReturnThumbUrl()
+        {
+            var json = @"{""query"":{""pages"":{""123"":{""title"":""File:Elvis Presley promoting Jailhouse Rock.jpg"",
+                ""imageinfo"":[{
+                  ""thumburl"":""https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg/330px-Elvis_Presley_promoting_Jailhouse_Rock.jpg"",
+                  ""url"":""https://upload.wikimedia.org/wikipedia/commons/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg""
+                }]}}}}";
+            WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => json));
+
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Elvis%20Presley%20promoting%20Jailhouse%20Rock.jpg?width=330";
+            var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
+
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg/330px-Elvis_Presley_promoting_Jailhouse_Rock.jpg", result);
+        }
+
+        [TestMethod]
+        public async Task WhenResolvingCommonsUrl_FileMissing_ShouldFallBackToOriginalUrl()
+        {
+            var json = @"{""query"":{""pages"":{
+                ""-1"":{""title"":""File:NonExistent.jpg"",""missing"":""""}}}}";
+            WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => json));
+
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/NonExistent.jpg";
+            var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
+
+            Assert.AreEqual(source, result);
+        }
+
+        [TestMethod]
+        public async Task WhenResolvingCommonsUrl_ApiReturnsError_ShouldFallBackToOriginalUrl()
+        {
+            WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => throw new HttpRequestException("Network error")));
+
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Test.jpg";
+            var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
+
+            Assert.AreEqual(source, result);
+        }
+
+        [TestMethod]
+        public async Task WhenResolvingBatchCommonsUrls_ShouldResolveAllInSingleCall()
+        {
+            var json = @"{""query"":{""pages"":{
+                ""111"":{""title"":""File:Image1.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/a/ab/Image1.jpg""}]},
+                ""222"":{""title"":""File:Image2.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/b/bc/Image2.jpg""}]}
+            }}}";
+            var handler = new FakeHttpMessageHandler(_ => json);
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            var sources = new List<string?>
+            {
+                "http://commons.wikimedia.org/wiki/Special:FilePath/Image1.jpg",
+                "http://commons.wikimedia.org/wiki/Special:FilePath/Image2.jpg",
+                "https://upload.wikimedia.org/wikipedia/commons/a/a9/AlreadyDirect.jpg"
+            };
+            var result = await WikiApi.ResolveCommonsFileUrlsBatchAsync(sources, CancellationToken.None);
+
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/a/ab/Image1.jpg", result[sources[0]!]);
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/b/bc/Image2.jpg", result[sources[1]!]);
+            Assert.AreEqual(sources[2], result[sources[2]!], "Non-Commons URL should pass through unchanged");
+            Assert.AreEqual(1, handler.RequestCount, "Both Commons files should be resolved in a single batched API call");
+        }
+
+        [TestMethod]
+        public async Task WhenResolvingBatchCommonsUrls_ApiNormalizesTitle_ShouldStillResolve()
+        {
+            // API normalizes "File:image.jpg" (lowercase i) to "File:Image.jpg" (uppercase I)
+            var json = @"{""query"":{
+                ""normalized"":[{""from"":""File:image.jpg"",""to"":""File:Image.jpg""}],
+                ""pages"":{""333"":{""title"":""File:Image.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/c/cd/Image.jpg""}]}}}}";
+            WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => json));
+
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/image.jpg";
+            var result = await WikiApi.ResolveCommonsFileUrlsBatchAsync(new List<string?> { source }, CancellationToken.None);
+
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/c/cd/Image.jpg", result[source]);
+        }
+
+        [TestMethod]
+        public async Task WhenResolvingNonCommonsUrlInBatch_ShouldPassThroughUnchanged()
+        {
+            WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => @"{""query"":{""pages"":{}}}"));
+
+            var source = "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg";
+            var result = await WikiApi.ResolveCommonsFileUrlsBatchAsync(new List<string?> { source }, CancellationToken.None);
+
+            Assert.AreEqual(source, result[source]);
+        }
+
         [TestMethod]
         public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays()
         {
@@ -438,5 +555,28 @@ namespace WikiDataTest
         }
 
         #endregion
+    }
+
+    internal class FakeHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, string> _responseSelector;
+        public int RequestCount { get; private set; }
+        public List<Uri?> RequestedUris { get; } = new List<Uri?>();
+
+        public FakeHttpMessageHandler(Func<HttpRequestMessage, string> responseSelector)
+        {
+            _responseSelector = responseSelector;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            RequestedUris.Add(request.RequestUri);
+            var json = _responseSelector(request);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+        }
     }
 }
