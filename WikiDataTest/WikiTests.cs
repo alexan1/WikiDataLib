@@ -14,32 +14,47 @@ namespace WikiDataTest
     [TestClass]
     public class WikiTests
     {
+        // Wraps a live integration test body, marking the test Inconclusive instead of Failed
+        // when the external API is unavailable, rate-limited, or times out.
+        private static async Task LiveTest(Func<Task> test)
+        {
+            try { await test(); }
+            catch (HttpRequestException ex) when (ex.ToString().IndexOf("429", StringComparison.Ordinal) >= 0 ||
+                                                   ex.ToString().IndexOf("Too Many Requests", StringComparison.Ordinal) >= 0 ||
+                                                   ex.ToString().IndexOf("503", StringComparison.Ordinal) >= 0)
+            {
+                Assert.Inconclusive("External API unavailable or rate-limited for this live smoke test.");
+            }
+            catch (TaskCanceledException)
+            {
+                Assert.Inconclusive("External API timed out for this live smoke test.");
+            }
+        }
+
         #region Integration Tests - Happy Path
 
         [TestMethod]
-        public async Task WhenSearchingForPope_ShouldReturnResults()
+        public async Task WhenSearchingForPope_ShouldReturnResults() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("Pope");
             Assert.AreNotEqual(0, people.Count);
-        }
+        });
 
         [TestMethod]
-        public async Task WhenGettingElvisPresley_ShouldReturnCorrectName()
+        public async Task WhenGettingElvisPresley_ShouldReturnCorrectName() => await LiveTest(async () =>
         {
             var person = await WikiData.GetWikiPersonAsync(303);
-
             Assert.IsNotNull(person);
             Assert.AreEqual("Elvis Presley", person.Name);
-        }
+        });
 
         [TestMethod]
-        public async Task WhenGettingElvisPresleyByWikipediaTitle_ShouldReturnCorrectName()
+        public async Task WhenGettingElvisPresleyByWikipediaTitle_ShouldReturnCorrectName() => await LiveTest(async () =>
         {
             var person = await WikiData.GetWikiPersonAsync("Elvis Presley");
-
             Assert.IsNotNull(person);
             Assert.AreEqual("Elvis Presley", person.Name);
-        }
+        });
 
         [DataTestMethod]
         [DataRow("")]
@@ -144,29 +159,29 @@ namespace WikiDataTest
         #region Edge Case Tests
 
         [TestMethod]
-        public async Task WhenSearchStringHasSpecialCharacters_ShouldNotThrow()
+        public async Task WhenSearchStringHasSpecialCharacters_ShouldNotThrow() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("O'Brien");
             Assert.IsNotNull(people);
-        }
+        });
 
         [TestMethod]
-        public async Task WhenSearchStringHasUnicode_ShouldNotThrow()
+        public async Task WhenSearchStringHasUnicode_ShouldNotThrow() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("Müller");
             Assert.IsNotNull(people);
-        }
+        });
 
         [TestMethod]
-        public async Task WhenSearchReturnsNoResults_ShouldReturnEmptyCollection()
+        public async Task WhenSearchReturnsNoResults_ShouldReturnEmptyCollection() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("XyZaBcDeF123NonExistentPerson999");
             Assert.IsNotNull(people);
             Assert.AreEqual(0, people.Count);
-        }
+        });
 
         [TestMethod]
-        public async Task WhenPersonHasAllFields_ShouldPopulateAllProperties()
+        public async Task WhenPersonHasAllFields_ShouldPopulateAllProperties() => await LiveTest(async () =>
         {
             var person = await WikiData.GetWikiPersonAsync(303); // Elvis Presley
 
@@ -178,7 +193,7 @@ namespace WikiDataTest
             Assert.IsNotNull(person.Death);
             Assert.IsNotNull(person.Image);
             Assert.IsNotNull(person.Link);
-        }
+        });
 
         #endregion
 
@@ -211,78 +226,60 @@ namespace WikiDataTest
         #region Integration Tests - Verify Data Quality
 
         [TestMethod]
-        public async Task WhenSearchingForAda_ShouldIncludeAdaLovelace()
+        public async Task WhenSearchingForAda_ShouldIncludeAdaLovelace() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("Ada");
-
             Assert.IsNotNull(people);
             Assert.IsTrue(people.Count > 0, "Search for 'Ada' should return results");
-
-            // Verify first result has a name
-            var firstPerson = people[0];
-            Assert.IsNotNull(firstPerson.Name, "First result should have a name");
-        }
+            Assert.IsNotNull(people[0].Name, "First result should have a name");
+        });
 
         [TestMethod]
-        public async Task WhenSearchingByPartialSurname_ShouldIncludeElvisPresley()
+        public async Task WhenSearchingByPartialSurname_ShouldIncludeElvisPresley() => await LiveTest(async () =>
         {
-            try
-            {
-                var people = await WikiData.WikiPeopleSearchAsync("Presley");
-
-                Assert.IsTrue(people.Any(person => person.Name == "Elvis Presley"),
-                    "Search for 'Presley' should include Elvis Presley");
-            }
-            catch (HttpRequestException ex) when (ex.ToString().Contains("429"))
-            {
-                Assert.Inconclusive("WikiData API rate-limited this live smoke test (429).");
-            }
-        }
+            var people = await WikiData.WikiPeopleSearchAsync("Presley");
+            Assert.IsTrue(people.Any(person => person.Name == "Elvis Presley"),
+                "Search for 'Presley' should include Elvis Presley");
+        });
 
         [TestMethod]
-        public async Task WhenSearchingWithWildcard_ShouldIncludeElvisPresley()
+        public async Task WhenSearchingWithWildcard_ShouldIncludeElvisPresley() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("*Presley*");
-
             Assert.IsTrue(people.Any(person => person.Name == "Elvis Presley"),
                 "Search for '*Presley*' should include Elvis Presley");
-        }
+        });
 
         [TestMethod]
-        public async Task WhenSearchingForPope_AllResultsShouldContainPopeInItemLabel()
+        public async Task WhenSearchingForPope_AllResultsShouldContainPopeInItemLabel() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("Pope");
-
             Assert.IsTrue(people.Count > 0, "Search for 'Pope' should return results");
             Assert.IsTrue(people.All(person => person.Name != null && person.Name.Contains("Pope", StringComparison.OrdinalIgnoreCase)),
                 "Search for 'Pope' should only return item labels containing 'Pope'");
-        }
+        });
 
         [TestMethod]
-        public async Task WhenGettingPersonById_ShouldHaveValidId()
+        public async Task WhenGettingPersonById_ShouldHaveValidId() => await LiveTest(async () =>
         {
             var person = await WikiData.GetWikiPersonAsync(303);
-
             Assert.AreEqual(303, person.Id);
-        }
+        });
 
         [TestMethod]
-        public async Task WhenGettingPersonById_ShouldHaveWikipediaLink()
+        public async Task WhenGettingPersonById_ShouldHaveWikipediaLink() => await LiveTest(async () =>
         {
             var person = await WikiData.GetWikiPersonAsync(303);
-
             Assert.IsNotNull(person.Link);
-            Assert.IsTrue(person.Link.StartsWith("https://en.wikipedia.org/"), 
+            Assert.IsTrue(person.Link.StartsWith("https://en.wikipedia.org/"),
                 "Link should be an English Wikipedia URL");
-        }
+        });
 
         [TestMethod]
         public async Task WhenGettingPeopleDiedOnDateWithYear_ShouldReturnMatchingDeathDates()
         {
             if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
-            {
                 return;
-            }
 
             try
             {
@@ -295,66 +292,68 @@ namespace WikiDataTest
             {
                 Assert.Inconclusive("Live Wikidata request timed out.");
             }
+            catch (HttpRequestException)
+            {
+                Assert.Inconclusive("External API unavailable or rate-limited for this live smoke test.");
+            }
         }
 
         [TestMethod]
         public async Task WhenGettingQ22686_ShouldFallbackToMulAndReturnName()
         {
-            // Skip this live integration test when running in CI
             if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI")))
-            {
                 return;
-            }
 
-            var person = await WikiData.GetWikiPersonAsync(22686); // Q22686 (Donald Trump)
-
-            Assert.IsNotNull(person);
-            Assert.IsFalse(string.IsNullOrWhiteSpace(person.Name));
-
-            // If the returned label isn't English, verify Wikidata's wbgetentities includes a 'mul' label
-            if (person.Name.IndexOf("Donald", StringComparison.OrdinalIgnoreCase) < 0)
+            await LiveTest(async () =>
             {
-                var url = "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q22686&languages=en|fr|ru|mul&format=json&origin=*";
-                using (var client = new System.Net.Http.HttpClient())
+                var person = await WikiData.GetWikiPersonAsync(22686);
+
+                Assert.IsNotNull(person);
+                Assert.IsFalse(string.IsNullOrWhiteSpace(person.Name));
+
+                if (person.Name.IndexOf("Donald", StringComparison.OrdinalIgnoreCase) < 0)
                 {
-                    client.DefaultRequestHeaders.UserAgent.ParseAdd("WikiDataLib-Inspector/1.0");
-                    var resp = client.GetAsync(url).Result;
-                    resp.EnsureSuccessStatusCode();
-                    var json = resp.Content.ReadAsStringAsync().Result;
-                    using (var doc = System.Text.Json.JsonDocument.Parse(json))
+                    var url = "https://www.wikidata.org/w/api.php?action=wbgetentities&ids=Q22686&languages=en|fr|ru|mul&format=json&origin=*";
+                    using (var client = new System.Net.Http.HttpClient())
                     {
-                        if (doc.RootElement.TryGetProperty("entities", out var entities) &&
-                            entities.TryGetProperty("Q22686", out var ent) &&
-                            ent.TryGetProperty("labels", out var labels) &&
-                            labels.TryGetProperty("mul", out var mulLabel) &&
-                            mulLabel.TryGetProperty("value", out var mulValue))
+                        client.DefaultRequestHeaders.UserAgent.ParseAdd("WikiDataLib-Inspector/1.0");
+                        var resp = client.GetAsync(url).Result;
+                        resp.EnsureSuccessStatusCode();
+                        var json = resp.Content.ReadAsStringAsync().Result;
+                        using (var doc = System.Text.Json.JsonDocument.Parse(json))
                         {
-                            Assert.IsFalse(string.IsNullOrWhiteSpace(mulValue.GetString()), "Expected 'mul' label to be present and non-empty");
-                        }
-                        else
-                        {
-                            Assert.Fail("Expected wbgetentities response to include a 'mul' label for Q22686 when English label is not returned.");
+                            if (doc.RootElement.TryGetProperty("entities", out var entities) &&
+                                entities.TryGetProperty("Q22686", out var ent) &&
+                                ent.TryGetProperty("labels", out var labels) &&
+                                labels.TryGetProperty("mul", out var mulLabel) &&
+                                mulLabel.TryGetProperty("value", out var mulValue))
+                            {
+                                Assert.IsFalse(string.IsNullOrWhiteSpace(mulValue.GetString()), "Expected 'mul' label to be present and non-empty");
+                            }
+                            else
+                            {
+                                Assert.Fail("Expected wbgetentities response to include a 'mul' label for Q22686 when English label is not returned.");
+                            }
                         }
                     }
                 }
-            }
+            });
         }
-       
+
         [TestMethod]
-        public async Task WhenSearchingForTrump_ShouldReturnResults()
+        public async Task WhenSearchingForTrump_ShouldReturnResults() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("trump");
             Assert.AreNotEqual(0, people.Count);
-        }
+        });
 
         [TestMethod]
-        public async Task WhenGettingDonaldTrump_ShouldReturnCorrectName()
+        public async Task WhenGettingDonaldTrump_ShouldReturnCorrectName() => await LiveTest(async () =>
         {
             var person = await WikiData.GetWikiPersonAsync(22686);
-
             Assert.IsNotNull(person);
             Assert.AreEqual("Donald Trump", person.Name);
-        }
+        });
 
         [TestMethod]
         public async Task WhenResolvingNonCommonsUrl_ShouldReturnOriginalValue()
@@ -486,68 +485,45 @@ namespace WikiDataTest
         }
 
         [TestMethod]
-        public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays()
+        public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays() => await LiveTest(async () =>
         {
-            try
-            {
-                const int limit = 50;
-                var people = await WikiData.GetPeopleBornOnDateAsync(1, 8, limit);
+            const int limit = 50;
+            var people = await WikiData.GetPeopleBornOnDateAsync(1, 8, limit);
 
-                Assert.IsNotNull(people);
-                Assert.IsTrue(people.Count > 0, "Expected at least one person born on January 8.");
-                Assert.IsTrue(people.Count <= limit, $"Expected at most {limit} results.");
-                Assert.IsTrue(people.All(person => person.Birthday.HasValue &&
-                    person.Birthday.Value.Month == 1 &&
-                    person.Birthday.Value.Day == 8),
-                    "All returned people should have a January 8 birthday.");
-            }
-            catch (TaskCanceledException)
-            {
-                Assert.Inconclusive("The public Wikipedia REST API timed out for this live smoke test.");
-            }
-            catch (HttpRequestException)
-            {
-                Assert.Inconclusive("The public Wikipedia REST API request failed for this live smoke test (possibly rate-limited).");
-            }
-        }
+            Assert.IsNotNull(people);
+            Assert.IsTrue(people.Count > 0, "Expected at least one person born on January 8.");
+            Assert.IsTrue(people.Count <= limit, $"Expected at most {limit} results.");
+            Assert.IsTrue(people.All(person => person.Birthday.HasValue &&
+                person.Birthday.Value.Month == 1 &&
+                person.Birthday.Value.Day == 8),
+                "All returned people should have a January 8 birthday.");
+        });
 
         [TestMethod]
-        public async Task WhenGettingPeopleDiedOnDate_ShouldReturnMatchingDeathDates()
+        public async Task WhenGettingPeopleDiedOnDate_ShouldReturnMatchingDeathDates() => await LiveTest(async () =>
         {
-            try
-            {
-                const int limit = 50;
-                var people = await WikiData.GetPeopleDiedOnDateAsync(8, 16, limit);
+            const int limit = 50;
+            var people = await WikiData.GetPeopleDiedOnDateAsync(8, 16, limit);
 
-                Assert.IsNotNull(people);
-                Assert.IsTrue(people.Count > 0, "Expected at least one person who died on August 16.");
-                Assert.IsTrue(people.Count <= limit, $"Expected at most {limit} results.");
-                Assert.IsTrue(people.All(person => person.Death.HasValue &&
-                    person.Death.Value.Month == 8 &&
-                    person.Death.Value.Day == 16),
-                    "All returned people should have an August 16 death date.");
-            }
-            catch (TaskCanceledException)
-            {
-                Assert.Inconclusive("The public Wikipedia REST API timed out for this live smoke test.");
-            }
-            catch (HttpRequestException)
-            {
-                Assert.Inconclusive("The public Wikipedia REST API request failed for this live smoke test (possibly rate-limited).");
-            }
-        }
+            Assert.IsNotNull(people);
+            Assert.IsTrue(people.Count > 0, "Expected at least one person who died on August 16.");
+            Assert.IsTrue(people.Count <= limit, $"Expected at most {limit} results.");
+            Assert.IsTrue(people.All(person => person.Death.HasValue &&
+                person.Death.Value.Month == 8 &&
+                person.Death.Value.Day == 16),
+                "All returned people should have an August 16 death date.");
+        });
 
         [TestMethod]
-        public async Task WhenSearchingBySurname_ShouldIncludeDonaldTrump()
+        public async Task WhenSearchingBySurname_ShouldIncludeDonaldTrump() => await LiveTest(async () =>
         {
             var people = await WikiData.WikiPeopleSearchAsync("trump");
 
             Assert.IsTrue(people.Any(person => person.Name == "Donald Trump"),
                 "Search for 'trump' should include Donald Trump");
-
             Assert.IsTrue(people.Any(person => person.Id == 22686),
-                "Search for 'trump' should include 22686"); 
-        }
+                "Search for 'trump' should include 22686");
+        });
 
         #endregion
     }
