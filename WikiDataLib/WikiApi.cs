@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
@@ -294,7 +296,7 @@ namespace WikiDataLib
             }
 
             var querySuffix = string.IsNullOrEmpty(uri.Query) ? string.Empty : uri.Query;
-            return $"https://commons.wikimedia.org/wiki/Special:Redirect/file/{Uri.EscapeDataString(fileName)}{querySuffix}";
+            return WikiData.BuildDirectUploadUrl(fileName, querySuffix);
         }
 
         private static string? ExtractPageUrl(JsonElement item)

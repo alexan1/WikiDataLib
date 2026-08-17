@@ -346,12 +346,21 @@ namespace WikiDataTest
         }
 
         [TestMethod]
-        public void WhenNormalizingWikidataSpecialFilePathImage_ShouldResolveCommonsThumbnailUrl()
+        public void WhenNormalizingWikidataSpecialFilePathImage_ShouldResolveDirectUploadUrl()
         {
             var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg?width=330";
             var result = WikiData.NormalizeCommonsImageUrl(source);
 
-            Assert.AreEqual("https://commons.wikimedia.org/wiki/Special:Redirect/file/Foo%20Bar.jpg?width=330", result);
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Foo_Bar.jpg/330px-Foo_Bar.jpg", result);
+        }
+
+        [TestMethod]
+        public void WhenNormalizingWikidataSpecialFilePathImageWithoutWidth_ShouldResolveDirectUploadUrl()
+        {
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg";
+            var result = WikiData.NormalizeCommonsImageUrl(source);
+
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/1/15/Foo_Bar.jpg", result);
         }
 
         [TestMethod]
@@ -364,12 +373,12 @@ namespace WikiDataTest
         }
 
         [TestMethod]
-        public void WhenNormalizingWikiApiSpecialFilePathImage_ShouldResolveCommonsThumbnailUrl()
+        public void WhenNormalizingWikiApiSpecialFilePathImage_ShouldResolveDirectUploadUrl()
         {
             var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg?width=330";
             var result = WikiApi.NormalizeThumbnailSource(source);
 
-            Assert.AreEqual("https://commons.wikimedia.org/wiki/Special:Redirect/file/Foo%20Bar.jpg?width=330", result);
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Foo_Bar.jpg/330px-Foo_Bar.jpg", result);
         }
 
         [TestMethod]
