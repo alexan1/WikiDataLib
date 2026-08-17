@@ -4,8 +4,6 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
@@ -85,12 +83,21 @@ namespace WikiDataLib
                     .Select((id, index) => new { id, index })
                     .ToDictionary(item => item.id, item => item.index);
 
-                var foundPersons = bindings
-                    .EnumerateArray()
-                    .Select(GetPersonFromJsonElement)
-                    .Where(person => person.Name != null && Regex.IsMatch(person.Name, searchPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
-                    .OrderBy(person => idOrder.TryGetValue(person.Id, out var index) ? index : int.MaxValue)
-                    .ToList();
+                var foundPersons = new System.Collections.Generic.List<WikiPerson>();
+                foreach (var binding in bindings.EnumerateArray())
+                {
+                    var person = await GetPersonFromJsonElementAsync(binding, cancellationToken).ConfigureAwait(false);
+                    if (person.Name != null && Regex.IsMatch(person.Name, searchPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                    {
+                        foundPersons.Add(person);
+                    }
+                }
+                foundPersons.Sort((a, b) =>
+                {
+                    var ai = idOrder.TryGetValue(a.Id, out var ai2) ? ai2 : int.MaxValue;
+                    var bi = idOrder.TryGetValue(b.Id, out var bi2) ? bi2 : int.MaxValue;
+                    return ai.CompareTo(bi);
+                });
 
                 return new Collection<WikiPerson>(foundPersons);
             }
@@ -168,7 +175,7 @@ namespace WikiDataLib
                 }
 
                 var item = bindings[0];
-                var person = GetPersonFromJsonElement(item);
+                var person = await GetPersonFromJsonElementAsync(item, cancellationToken).ConfigureAwait(false);
 
                 return person;
             }
@@ -475,14 +482,14 @@ namespace WikiDataLib
             return true;
         }
 
-        private static WikiPerson GetPersonFromJsonElement(JsonElement item)
+        private static async Task<WikiPerson> GetPersonFromJsonElementAsync(JsonElement item, CancellationToken cancellationToken)
         {
             var id = ExtractId(item);
             var name = ExtractStringProperty(item, FieldItemLabel);
             var description = ExtractStringProperty(item, FieldItemDescription);
             var birthday = ExtractDateProperty(item, FieldBirthDate);
             var death = ExtractDateProperty(item, FieldDeathDate);
-            var image = NormalizeCommonsImageUrl(ExtractStringProperty(item, FieldImage));
+            var image = await WikiApi.ResolveCommonsFileUrlAsync(ExtractStringProperty(item, FieldImage), cancellationToken).ConfigureAwait(false);
             var link = ExtractStringProperty(item, FieldArticle);
 
             return new WikiPerson
@@ -495,84 +502,6 @@ namespace WikiDataLib
                 Image = image,
                 Link = link
             };
-        }
-
-        internal static string? NormalizeCommonsImageUrl(string? imageUrl)
-        {
-            if (string.IsNullOrWhiteSpace(imageUrl))
-            {
-                return imageUrl;
-            }
-
-            if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri))
-            {
-                return imageUrl;
-            }
-
-            const string commonsHost = "commons.wikimedia.org";
-            const string specialFilePathPrefix = "/wiki/Special:FilePath/";
-
-            if (!commonsHost.Equals(uri.Host, StringComparison.OrdinalIgnoreCase) ||
-                !uri.AbsolutePath.StartsWith(specialFilePathPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return imageUrl;
-            }
-
-            var fileNameEncoded = uri.AbsolutePath.Substring(specialFilePathPrefix.Length);
-            var fileName = Uri.UnescapeDataString(fileNameEncoded);
-            if (string.IsNullOrWhiteSpace(fileName))
-            {
-                return imageUrl;
-            }
-
-            var querySuffix = string.IsNullOrEmpty(uri.Query) ? string.Empty : uri.Query;
-            return BuildDirectUploadUrl(fileName, querySuffix);
-        }
-
-        // Builds a direct upload.wikimedia.org URL, bypassing any commons.wikimedia.org redirect.
-        // Wikimedia stores files under /wikipedia/commons/{md5[0]}/{md5[0..1]}/{filename}.
-        // When a ?width=N param is present the thumbnail path is used instead.
-        internal static string BuildDirectUploadUrl(string fileName, string querySuffix)
-        {
-            var normalized = fileName.Replace(' ', '_');
-            string hash;
-            using (var md5 = MD5.Create())
-            {
-                var bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(normalized));
-                hash = BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
-            }
-            var a = hash.Substring(0, 1);
-            var ab = hash.Substring(0, 2);
-            var encodedName = Uri.EscapeDataString(normalized);
-
-            var widthValue = ExtractWidthFromQuery(querySuffix);
-            if (widthValue != null)
-            {
-                return $"https://upload.wikimedia.org/wikipedia/commons/thumb/{a}/{ab}/{encodedName}/{widthValue}px-{encodedName}";
-            }
-
-            return $"https://upload.wikimedia.org/wikipedia/commons/{a}/{ab}/{encodedName}";
-        }
-
-        // Parses ?width=N or &width=N from a raw query string (e.g. "?width=330").
-        // Returns the numeric string if present, otherwise null.
-        private static string? ExtractWidthFromQuery(string querySuffix)
-        {
-            if (string.IsNullOrEmpty(querySuffix))
-                return null;
-            var q = querySuffix.TrimStart('?');
-            foreach (var pair in q.Split('&'))
-            {
-                var eq = pair.IndexOf('=');
-                if (eq < 0) continue;
-                var key = pair.Substring(0, eq);
-                if (string.Equals(key, "width", StringComparison.OrdinalIgnoreCase))
-                {
-                    var val = pair.Substring(eq + 1);
-                    return string.IsNullOrEmpty(val) ? null : val;
-                }
-            }
-            return null;
         }
 
         private static int ExtractId(JsonElement item)

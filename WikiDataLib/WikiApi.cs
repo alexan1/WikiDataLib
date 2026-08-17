@@ -3,8 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Net.Http;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
@@ -100,7 +98,7 @@ namespace WikiDataLib
                     cancellationToken,
                     notFoundMessage: $"No Wikipedia page found for title '{wikipediaTitle}'.").ConfigureAwait(false);
 
-                return BuildPersonFromSummary(root);
+                return await BuildPersonFromSummaryAsync(root, cancellationToken).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
@@ -154,7 +152,7 @@ namespace WikiDataLib
 
                     foreach (var page in pages.EnumerateArray())
                     {
-                        people.Add(BuildPersonFromPage(page, month, day, year, eventType));
+                        people.Add(await BuildPersonFromPageAsync(page, month, day, year, eventType, cancellationToken).ConfigureAwait(false));
                     }
                 }
 
@@ -170,26 +168,26 @@ namespace WikiDataLib
             }
         }
 
-        private static WikiPerson BuildPersonFromSummary(JsonElement root)
+        private static async Task<WikiPerson> BuildPersonFromSummaryAsync(JsonElement root, CancellationToken cancellationToken)
         {
             return new WikiPerson
             {
                 Id = ExtractWikiEntityId(root),
                 Name = ExtractNormalizedTitle(root),
                 Description = ExtractStringProperty(root, "description"),
-                Image = ExtractThumbnailSource(root),
+                Image = await ExtractThumbnailSourceAsync(root, cancellationToken).ConfigureAwait(false),
                 Link = ExtractPageUrl(root)
             };
         }
 
-        private static WikiPerson BuildPersonFromPage(JsonElement page, int month, int day, int year, string eventType)
+        private static async Task<WikiPerson> BuildPersonFromPageAsync(JsonElement page, int month, int day, int year, string eventType, CancellationToken cancellationToken)
         {
             var person = new WikiPerson
             {
                 Id = ExtractWikiEntityId(page),
                 Name = ExtractNormalizedTitle(page),
                 Description = ExtractStringProperty(page, "description"),
-                Image = ExtractThumbnailSource(page),
+                Image = await ExtractThumbnailSourceAsync(page, cancellationToken).ConfigureAwait(false),
                 Link = ExtractPageUrl(page)
             };
 
@@ -255,19 +253,22 @@ namespace WikiDataLib
             return property.GetString();
         }
 
-        private static string? ExtractThumbnailSource(JsonElement item)
+        private static async Task<string?> ExtractThumbnailSourceAsync(JsonElement item, CancellationToken cancellationToken)
         {
             if (item.TryGetProperty("thumbnail", out var thumbnail) &&
                 thumbnail.TryGetProperty("source", out var source))
             {
                 var sourceValue = source.GetString();
-                return NormalizeThumbnailSource(sourceValue);
+                return await ResolveCommonsFileUrlAsync(sourceValue, cancellationToken).ConfigureAwait(false);
             }
 
             return null;
         }
 
-        internal static string? NormalizeThumbnailSource(string? source)
+        // Resolves a commons.wikimedia.org Special:FilePath URL to a direct upload.wikimedia.org URL
+        // by calling the Commons imageinfo API, which handles all filename normalization, redirects,
+        // and hashing server-side. Non-Commons URLs are returned unchanged.
+        internal static async Task<string?> ResolveCommonsFileUrlAsync(string? source, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(source))
             {
@@ -295,8 +296,94 @@ namespace WikiDataLib
                 return source;
             }
 
-            var querySuffix = string.IsNullOrEmpty(uri.Query) ? string.Empty : uri.Query;
-            return WikiData.BuildDirectUploadUrl(fileName, querySuffix);
+            var widthParam = ExtractWidthFromQuery(uri.Query);
+            var apiUrl = widthParam != null
+                ? $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{Uri.EscapeDataString(fileName)}&prop=imageinfo&iiprop=url&iiurlwidth={widthParam}&format=json"
+                : $"https://commons.wikimedia.org/w/api.php?action=query&titles=File:{Uri.EscapeDataString(fileName)}&prop=imageinfo&iiprop=url&format=json";
+
+            try
+            {
+                var root = await ExecuteJsonRequestAsync(apiUrl, cancellationToken).ConfigureAwait(false);
+
+                if (root.TryGetProperty("query", out var query) &&
+                    query.TryGetProperty("pages", out var pages))
+                {
+                    foreach (var page in pages.EnumerateObject())
+                    {
+                        // Skip missing files (page key "-1")
+                        if (page.Value.TryGetProperty("missing", out _))
+                        {
+                            continue;
+                        }
+
+                        if (page.Value.TryGetProperty("imageinfo", out var imageinfo) &&
+                            imageinfo.GetArrayLength() > 0)
+                        {
+                            var info = imageinfo[0];
+                            // When iiurlwidth is set, Wikimedia returns thumburl; otherwise url.
+                            var urlProp = widthParam != null && info.TryGetProperty("thumburl", out var thumbUrl)
+                                ? thumbUrl.GetString()
+                                : info.TryGetProperty("url", out var fullUrl) ? fullUrl.GetString() : null;
+
+                            if (!string.IsNullOrWhiteSpace(urlProp))
+                            {
+                                // Strip Wikimedia UTM tracking params Wikimedia appends to imageinfo URLs.
+                                return StripQueryParams(urlProp, "utm_source", "utm_campaign", "utm_content");
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is JsonException || ex is InvalidOperationException)
+            {
+                // Fall back to the original URL rather than silently breaking image display.
+            }
+
+            return source;
+        }
+
+        // Parses ?width=N or &width=N from a raw query string (e.g. "?width=330").
+        private static string? ExtractWidthFromQuery(string? querySuffix)
+        {
+            if (string.IsNullOrEmpty(querySuffix))
+                return null;
+            var q = querySuffix.TrimStart('?');
+            foreach (var pair in q.Split('&'))
+            {
+                var eq = pair.IndexOf('=');
+                if (eq < 0) continue;
+                var key = pair.Substring(0, eq);
+                if (string.Equals(key, "width", StringComparison.OrdinalIgnoreCase))
+                {
+                    var val = pair.Substring(eq + 1);
+                    return string.IsNullOrEmpty(val) ? null : val;
+                }
+            }
+            return null;
+        }
+
+        // Removes specified query parameters from a URL, returning a clean URL.
+        private static string StripQueryParams(string url, params string[] paramsToRemove)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || string.IsNullOrEmpty(uri.Query))
+                return url;
+
+            var q = uri.Query.TrimStart('?');
+            var kept = new System.Collections.Generic.List<string>();
+            foreach (var pair in q.Split('&'))
+            {
+                var eq = pair.IndexOf('=');
+                var key = eq >= 0 ? pair.Substring(0, eq) : pair;
+                var skip = false;
+                foreach (var p in paramsToRemove)
+                {
+                    if (string.Equals(key, p, StringComparison.OrdinalIgnoreCase)) { skip = true; break; }
+                }
+                if (!skip) kept.Add(pair);
+            }
+
+            var baseUrl = url.IndexOf('?') >= 0 ? url.Substring(0, url.IndexOf('?')) : url;
+            return kept.Count > 0 ? $"{baseUrl}?{string.Join("&", kept)}" : baseUrl;
         }
 
         private static string? ExtractPageUrl(JsonElement item)
