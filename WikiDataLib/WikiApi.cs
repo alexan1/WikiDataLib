@@ -19,7 +19,10 @@ namespace WikiDataLib
         private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36";
         private const int MaxRetryAttempts = 3;
 
-        private static HttpClient _httpClient = CreateHttpClient(null);
+        // volatile ensures reads/writes to the field are not reordered by the JIT.
+        // SetHttpMessageHandlerForTesting is not thread-safe and must only be called
+        // from single-threaded test setup/teardown — never from concurrent production code.
+        private static volatile HttpClient _httpClient = CreateHttpClient(null);
 
         private static readonly ConcurrentDictionary<string, JsonElement> _cache =
             new ConcurrentDictionary<string, JsonElement>();
@@ -402,6 +405,8 @@ namespace WikiDataLib
                         var toStr = to.GetString();
                         if (fromStr != null && toStr != null)
                             normalizedMap[toStr] = fromStr; // canonical title → our sent title
+                            // Note: if two sent titles normalize to the same canonical title (rare),
+                            // the last entry wins; the other image falls back to its original URL.
                     }
                 }
             }
