@@ -186,6 +186,7 @@ namespace WikiDataLib
 
                 var item = bindings[0];
                 var rawImage = ExtractStringProperty(item, FieldImage);
+                // Single-person path: one image URL, no batching needed.
                 var resolvedImage = await WikiApi.ResolveCommonsFileUrlAsync(rawImage, cancellationToken).ConfigureAwait(false);
                 var person = GetPersonFromJsonElement(item, resolvedImage ?? rawImage);
 
