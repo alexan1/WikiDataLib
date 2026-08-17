@@ -346,48 +346,39 @@ namespace WikiDataTest
         }
 
         [TestMethod]
-        public void WhenNormalizingWikidataSpecialFilePathImage_ShouldResolveDirectUploadUrl()
+        public async Task WhenResolvingCommonsSpecialFilePathImage_WithWidth_ShouldReturnDirectUploadUrl()
         {
-            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg?width=330";
-            var result = WikiData.NormalizeCommonsImageUrl(source);
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Elvis%20Presley%20promoting%20Jailhouse%20Rock.jpg?width=330";
+            var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
 
-            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Foo_Bar.jpg/330px-Foo_Bar.jpg", result);
+            Assert.IsNotNull(result);
+            StringAssert.StartsWith(result, "https://upload.wikimedia.org/");
         }
 
         [TestMethod]
-        public void WhenNormalizingWikidataSpecialFilePathImageWithoutWidth_ShouldResolveDirectUploadUrl()
+        public async Task WhenResolvingCommonsSpecialFilePathImage_WithoutWidth_ShouldReturnDirectUploadUrl()
         {
-            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg";
-            var result = WikiData.NormalizeCommonsImageUrl(source);
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Elvis%20Presley%20promoting%20Jailhouse%20Rock.jpg";
+            var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
 
-            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/1/15/Foo_Bar.jpg", result);
+            Assert.IsNotNull(result);
+            StringAssert.StartsWith(result, "https://upload.wikimedia.org/");
         }
 
         [TestMethod]
-        public void WhenNormalizingNonSpecialFilePathImage_ShouldKeepOriginalValue()
+        public async Task WhenResolvingNonCommonsUrl_ShouldReturnOriginalValue()
         {
             var source = "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg";
-            var result = WikiData.NormalizeCommonsImageUrl(source);
+            var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
 
             Assert.AreEqual(source, result);
         }
 
         [TestMethod]
-        public void WhenNormalizingWikiApiSpecialFilePathImage_ShouldResolveDirectUploadUrl()
+        public async Task WhenResolvingNullOrEmptyUrl_ShouldReturnOriginalValue()
         {
-            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Foo%20Bar.jpg?width=330";
-            var result = WikiApi.NormalizeThumbnailSource(source);
-
-            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Foo_Bar.jpg/330px-Foo_Bar.jpg", result);
-        }
-
-        [TestMethod]
-        public void WhenNormalizingWikiApiNonSpecialFilePathImage_ShouldKeepOriginalValue()
-        {
-            var source = "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg";
-            var result = WikiApi.NormalizeThumbnailSource(source);
-
-            Assert.AreEqual(source, result);
+            Assert.IsNull(await WikiApi.ResolveCommonsFileUrlAsync(null, CancellationToken.None));
+            Assert.AreEqual("", await WikiApi.ResolveCommonsFileUrlAsync("", CancellationToken.None));
         }
 
         [TestMethod]
