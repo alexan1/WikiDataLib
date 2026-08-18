@@ -514,6 +514,7 @@ namespace WikiDataTest
                 Assert.AreEqual("*", originValue,
                     "Commons imageinfo API call must include origin=* parameter for CORS support");
             }
+        }
 
         [TestMethod]
         public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays() => await LiveTest(async () =>
