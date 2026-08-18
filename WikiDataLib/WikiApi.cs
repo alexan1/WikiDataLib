@@ -365,8 +365,8 @@ namespace WikiDataLib
                     // Pipe-separate titles; encode each filename but keep | as literal separator.
                     var titlesParam = string.Join("|", chunk.Select(t => Uri.EscapeDataString(t)));
                     var apiUrl = widthParam != null
-                        ? $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&iiurlwidth={widthParam}&format=json"
-                        : $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&format=json";
+                        ? $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&iiurlwidth={widthParam}&format=json&origin=*"
+                        : $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&format=json&origin=*";
 
                     try
                     {
