@@ -490,14 +490,30 @@ namespace WikiDataTest
             var handler = new FakeHttpMessageHandler(_ => @"{""query"":{""pages"":{""111"":{""title"":""File:Test.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/t/te/Test.jpg""}]}}}}");
             WikiApi.SetHttpMessageHandlerForTesting(handler);
 
-            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Test.jpg";
-            await WikiApi.ResolveCommonsFileUrlsBatchAsync(new List<string?> { source }, CancellationToken.None);
+            var sources = new List<string?>
+            {
+                "http://commons.wikimedia.org/wiki/Special:FilePath/Test.jpg",
+                "http://commons.wikimedia.org/wiki/Special:FilePath/Test.jpg?width=330"
+            };
+            await WikiApi.ResolveCommonsFileUrlsBatchAsync(sources, CancellationToken.None);
 
             Assert.IsTrue(handler.RequestedUris.Count > 0, "Expected at least one API request");
-            var requestUrl = handler.RequestedUris[0]?.ToString() ?? "";
-            Assert.IsTrue(requestUrl.Contains("origin=*", StringComparison.Ordinal), 
-                "Commons imageinfo API call must include 'origin=*' parameter for CORS support");
-        }
+            Assert.IsTrue(handler.RequestedUris.Any(u => u != null && u.Query.Contains("iiurlwidth=330", StringComparison.Ordinal)),
+                "Expected at least one Commons imageinfo request to include the iiurlwidth parameter");
+
+            foreach (var uri in handler.RequestedUris.Where(u => u != null).Select(u => u!))
+            {
+                var originValue = uri.Query.TrimStart('?')
+                    .Split('&')
+                    .Select(p => p.Split(new[] { '=' }, 2))
+                    .Where(p => p.Length == 2)
+                    .Select(p => new { Key = Uri.UnescapeDataString(p[0]), Value = Uri.UnescapeDataString(p[1]) })
+                    .FirstOrDefault(p => string.Equals(p.Key, "origin", StringComparison.OrdinalIgnoreCase))
+                    ?.Value;
+
+                Assert.AreEqual("*", originValue,
+                    "Commons imageinfo API call must include origin=* parameter for CORS support");
+            }
 
         [TestMethod]
         public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays() => await LiveTest(async () =>
