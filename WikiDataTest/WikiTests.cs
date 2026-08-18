@@ -485,6 +485,21 @@ namespace WikiDataTest
         }
 
         [TestMethod]
+        public async Task WhenResolvingCommonsUrls_ShouldIncludeOriginParameterForCors()
+        {
+            var handler = new FakeHttpMessageHandler(_ => @"{""query"":{""pages"":{""111"":{""title"":""File:Test.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/t/te/Test.jpg""}]}}}}");
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Test.jpg";
+            await WikiApi.ResolveCommonsFileUrlsBatchAsync(new List<string?> { source }, CancellationToken.None);
+
+            Assert.IsTrue(handler.RequestedUris.Count > 0, "Expected at least one API request");
+            var requestUrl = handler.RequestedUris[0]?.ToString() ?? "";
+            Assert.IsTrue(requestUrl.Contains("origin=*", StringComparison.Ordinal), 
+                "Commons imageinfo API call must include 'origin=*' parameter for CORS support");
+        }
+
+        [TestMethod]
         public async Task WhenGettingPeopleBornOnDate_ShouldReturnMatchingBirthdays() => await LiveTest(async () =>
         {
             const int limit = 50;
