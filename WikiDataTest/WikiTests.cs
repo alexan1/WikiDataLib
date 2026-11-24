@@ -382,16 +382,32 @@ namespace WikiDataTest
         }
 
         [TestMethod]
-        public async Task WhenResolvingCommonsUrl_ImageinfoReturnsUrl_ShouldReturnCleanUploadUrl()
+        public async Task WhenResolvingCommonsUrlWithoutWidth_ShouldComputeUploadUrlLocally()
         {
-            var json = @"{""query"":{""pages"":{""123"":{""title"":""File:Elvis Presley promoting Jailhouse Rock.jpg"",
-                ""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original""}]}}}}";
-            WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => json));
+            var handler = new FakeHttpMessageHandler(_ => throw new InvalidOperationException("No HTTP call expected"));
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
 
             var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Elvis%20Presley%20promoting%20Jailhouse%20Rock.jpg";
             var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
 
             Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg", result);
+            Assert.AreEqual(0, handler.RequestCount, "Original-file URLs should be computed without calling the Commons API");
+        }
+
+        // Expected values are the real URLs returned by the Commons imageinfo API.
+        [DataTestMethod]
+        [DataRow("Albert Einstein Head.jpg", "https://upload.wikimedia.org/wikipedia/commons/d/d3/Albert_Einstein_Head.jpg")]
+        [DataRow("Marie Curie c. 1920s.jpg", "https://upload.wikimedia.org/wikipedia/commons/c/c8/Marie_Curie_c._1920s.jpg")]
+        [DataRow("Frédéric Chopin by Bisson, 1849.png", "https://upload.wikimedia.org/wikipedia/commons/3/36/Fr%C3%A9d%C3%A9ric_Chopin_by_Bisson%2C_1849.png")]
+        [DataRow("Ab'acus - capital of a Doric column.png", "https://upload.wikimedia.org/wikipedia/commons/4/48/Ab%27acus_-_capital_of_a_Doric_column.png")]
+        [DataRow("Ab Baars & Marta Warelis.jpg", "https://upload.wikimedia.org/wikipedia/commons/7/77/Ab_Baars_%26_Marta_Warelis.jpg")]
+        [DataRow("Ab, Ha; Tumulus, Thalamus-... 1654 (IA bim early-english-books-1641-1700 ab-ha-tumulus-thalamu 1654).pdf",
+                 "https://upload.wikimedia.org/wikipedia/commons/8/81/Ab%2C_Ha%3B_Tumulus%2C_Thalamus-..._1654_%28IA_bim_early-english-books-1641-1700_ab-ha-tumulus-thalamu_1654%29.pdf")]
+        [DataRow("beethoven.jpg", "https://upload.wikimedia.org/wikipedia/commons/6/6f/Beethoven.jpg")]
+        [DataRow("  Beethoven.jpg ", "https://upload.wikimedia.org/wikipedia/commons/6/6f/Beethoven.jpg")]
+        public void WhenBuildingCommonsOriginalUrl_ShouldMatchCommonsUploadUrl(string fileName, string expected)
+        {
+            Assert.AreEqual(expected, WikiApi.BuildCommonsOriginalUrl(fileName));
         }
 
         [TestMethod]
@@ -417,7 +433,7 @@ namespace WikiDataTest
                 ""-1"":{""title"":""File:NonExistent.jpg"",""missing"":""""}}}}";
             WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => json));
 
-            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/NonExistent.jpg";
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/NonExistent.jpg?width=330";
             var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
 
             Assert.AreEqual(source, result);
@@ -428,7 +444,7 @@ namespace WikiDataTest
         {
             WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => throw new HttpRequestException("Network error")));
 
-            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Test.jpg";
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/Test.jpg?width=330";
             var result = await WikiApi.ResolveCommonsFileUrlAsync(source, CancellationToken.None);
 
             Assert.AreEqual(source, result);
@@ -438,22 +454,22 @@ namespace WikiDataTest
         public async Task WhenResolvingBatchCommonsUrls_ShouldResolveAllInSingleCall()
         {
             var json = @"{""query"":{""pages"":{
-                ""111"":{""title"":""File:Image1.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/a/ab/Image1.jpg""}]},
-                ""222"":{""title"":""File:Image2.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/b/bc/Image2.jpg""}]}
+                ""111"":{""title"":""File:Image1.jpg"",""imageinfo"":[{""thumburl"":""https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Image1.jpg/330px-Image1.jpg""}]},
+                ""222"":{""title"":""File:Image2.jpg"",""imageinfo"":[{""thumburl"":""https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Image2.jpg/330px-Image2.jpg""}]}
             }}}";
             var handler = new FakeHttpMessageHandler(_ => json);
             WikiApi.SetHttpMessageHandlerForTesting(handler);
 
             var sources = new List<string?>
             {
-                "http://commons.wikimedia.org/wiki/Special:FilePath/Image1.jpg",
-                "http://commons.wikimedia.org/wiki/Special:FilePath/Image2.jpg",
+                "http://commons.wikimedia.org/wiki/Special:FilePath/Image1.jpg?width=330",
+                "http://commons.wikimedia.org/wiki/Special:FilePath/Image2.jpg?width=330",
                 "https://upload.wikimedia.org/wikipedia/commons/a/a9/AlreadyDirect.jpg"
             };
             var result = await WikiApi.ResolveCommonsFileUrlsBatchAsync(sources, CancellationToken.None);
 
-            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/a/ab/Image1.jpg", result[sources[0]!]);
-            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/b/bc/Image2.jpg", result[sources[1]!]);
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Image1.jpg/330px-Image1.jpg", result[sources[0]!]);
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/Image2.jpg/330px-Image2.jpg", result[sources[1]!]);
             Assert.AreEqual(sources[2], result[sources[2]!], "Non-Commons URL should pass through unchanged");
             Assert.AreEqual(1, handler.RequestCount, "Both Commons files should be resolved in a single batched API call");
         }
@@ -464,13 +480,13 @@ namespace WikiDataTest
             // API normalizes "File:image.jpg" (lowercase i) to "File:Image.jpg" (uppercase I)
             var json = @"{""query"":{
                 ""normalized"":[{""from"":""File:image.jpg"",""to"":""File:Image.jpg""}],
-                ""pages"":{""333"":{""title"":""File:Image.jpg"",""imageinfo"":[{""url"":""https://upload.wikimedia.org/wikipedia/commons/c/cd/Image.jpg""}]}}}}";
+                ""pages"":{""333"":{""title"":""File:Image.jpg"",""imageinfo"":[{""thumburl"":""https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Image.jpg/330px-Image.jpg""}]}}}}";
             WikiApi.SetHttpMessageHandlerForTesting(new FakeHttpMessageHandler(_ => json));
 
-            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/image.jpg";
+            var source = "http://commons.wikimedia.org/wiki/Special:FilePath/image.jpg?width=330";
             var result = await WikiApi.ResolveCommonsFileUrlsBatchAsync(new List<string?> { source }, CancellationToken.None);
 
-            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/c/cd/Image.jpg", result[source]);
+            Assert.AreEqual("https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Image.jpg/330px-Image.jpg", result[source]);
         }
 
         [TestMethod]
@@ -557,13 +573,126 @@ namespace WikiDataTest
                 "Search for 'trump' should include 22686");
         });
 
+
+        [TestMethod]
+        public async Task WhenOriginalUrlComputedLocally_ShouldMatchCommonsApi() => await LiveTest(async () =>
+        {
+            // Guards the local hashing scheme against drift from what Commons actually serves.
+            var names = new[] { "Elvis Presley promoting Jailhouse Rock.jpg", "Frédéric Chopin by Bisson, 1849.png", "Ab Baars & Marta Warelis.jpg" };
+            var titles = string.Join("|", names.Select(n => Uri.EscapeDataString("File:" + n)));
+            var url = $"https://commons.wikimedia.org/w/api.php?action=query&titles={titles}&prop=imageinfo&iiprop=url&format=json&origin=*";
+            using (var client = new HttpClient())
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("WikiDataLib-Tests/1.0 (+https://github.com/alexan1/WikiDataLib)");
+                var json = await client.GetStringAsync(url);
+                using (var doc = System.Text.Json.JsonDocument.Parse(json))
+                {
+                    var apiUrls = doc.RootElement.GetProperty("query").GetProperty("pages").EnumerateObject()
+                        .Select(p => p.Value.GetProperty("imageinfo")[0].GetProperty("url").GetString()!.Split('?')[0])
+                        .ToList();
+                    foreach (var name in names)
+                    {
+                        CollectionAssert.Contains(apiUrls, WikiApi.BuildCommonsOriginalUrl(name), name);
+                    }
+                }
+            }
+        });
+
+        [TestMethod]
+        public async Task WhenRequestingDateFeedWithLimit_ShouldOnlyResolveImagesForReturnedPeople()
+        {
+            var feed = @"{""births"":[
+                {""year"":1935,""pages"":[{""title"":""A"",""wikibase_item"":""Q1"",""thumbnail"":{""source"":""http://commons.wikimedia.org/wiki/Special:FilePath/A.jpg?width=100""}}]},
+                {""year"":1940,""pages"":[{""title"":""B"",""wikibase_item"":""Q2"",""thumbnail"":{""source"":""http://commons.wikimedia.org/wiki/Special:FilePath/B.jpg?width=100""}},
+                                         {""title"":""C"",""wikibase_item"":""Q3"",""thumbnail"":{""source"":""http://commons.wikimedia.org/wiki/Special:FilePath/C.jpg?width=100""}}]}
+            ]}";
+            var handler = new FakeHttpMessageHandler(req =>
+                req.RequestUri!.Host == "en.wikipedia.org" ? feed : @"{""query"":{""pages"":{}}}");
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            var people = await WikiData.GetPeopleBornOnDateAsync(1, 8, 2);
+
+            CollectionAssert.AreEqual(new[] { "A", "B" }, people.Select(p => p.Name).ToArray());
+            var commonsQuery = Uri.UnescapeDataString(handler.RequestedUris.Single(u => u!.Host == "commons.wikimedia.org")!.Query);
+            StringAssert.Contains(commonsQuery, "File:A.jpg|File:B.jpg");
+            Assert.IsFalse(commonsQuery.Contains("File:C.jpg"), "Images beyond the limit should not be resolved");
+        }
+
+        [TestMethod]
+        public async Task WhenSameUrlRequestedConcurrently_ShouldIssueSingleHttpRequest()
+        {
+            var handler = new DelayedHttpMessageHandler(TimeSpan.FromMilliseconds(200), @"{""title"":""Elvis Presley"",""wikibase_item"":""Q303""}");
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            var tasks = Enumerable.Range(0, 10).Select(_ => WikiApi.GetWikiPersonAsync("Elvis Presley")).ToArray();
+            var people = await Task.WhenAll(tasks);
+
+            Assert.IsTrue(people.All(p => p.Id == 303));
+            Assert.AreEqual(1, handler.RequestCount, "Concurrent identical requests should share one HTTP call");
+
+            await WikiApi.GetWikiPersonAsync("Elvis Presley");
+            Assert.AreEqual(1, handler.RequestCount, "Subsequent request should be served from cache");
+        }
+
+        [TestMethod]
+        public async Task WhenOneCallerCancels_OtherCallersForSameUrlShouldStillSucceed()
+        {
+            var handler = new DelayedHttpMessageHandler(TimeSpan.FromMilliseconds(300), @"{""title"":""Elvis Presley"",""wikibase_item"":""Q303""}");
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            using (var cts = new CancellationTokenSource())
+            {
+                var cancelled = WikiApi.GetWikiPersonAsync("Elvis Presley", cts.Token);
+                var other = WikiApi.GetWikiPersonAsync("Elvis Presley");
+                cts.Cancel();
+
+                await Assert.ThrowsExceptionAsync<OperationCanceledException>(async () => await cancelled);
+                Assert.AreEqual(303, (await other).Id);
+                Assert.AreEqual(1, handler.RequestCount);
+            }
+        }
+
+        [TestMethod]
+        public async Task WhenRequestFails_ShouldNotCacheFailure()
+        {
+            var calls = 0;
+            // 400 is non-transient, so the first call fails fast without retry backoff.
+            var handler = new LambdaHttpMessageHandler(_ => Interlocked.Increment(ref calls) == 1
+                ? new HttpResponseMessage(HttpStatusCode.BadRequest)
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(@"{""title"":""Elvis Presley"",""wikibase_item"":""Q303""}", Encoding.UTF8, "application/json")
+                });
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            await Assert.ThrowsExceptionAsync<HttpRequestException>(() => WikiApi.GetWikiPersonAsync("Elvis Presley"));
+            var person = await WikiApi.GetWikiPersonAsync("Elvis Presley");
+            Assert.AreEqual(303, person.Id);
+            Assert.AreEqual(2, calls);
+        }
+
+        [TestMethod]
+        public async Task WhenSendingRequests_ShouldUseDescriptiveUserAgent()
+        {
+            var handler = new FakeHttpMessageHandler(_ => @"{""title"":""X"",""wikibase_item"":""Q1""}");
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            await WikiApi.GetWikiPersonAsync("X");
+
+            var ua = handler.LastRequest!.Headers.UserAgent.ToString();
+            StringAssert.StartsWith(ua, "WikiDataLib/");
+            StringAssert.Contains(ua, "github.com/alexan1/WikiDataLib");
+        }
+
         #endregion
     }
 
     internal class FakeHttpMessageHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, string> _responseSelector;
-        public int RequestCount { get; private set; }
+        private int _requestCount;
+        public int RequestCount => _requestCount;
+        public HttpRequestMessage? LastRequest { get; private set; }
         public List<Uri?> RequestedUris { get; } = new List<Uri?>();
 
         public FakeHttpMessageHandler(Func<HttpRequestMessage, string> responseSelector)
@@ -573,13 +702,53 @@ namespace WikiDataTest
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            RequestCount++;
-            RequestedUris.Add(request.RequestUri);
+            Interlocked.Increment(ref _requestCount);
+            LastRequest = request;
+            lock (RequestedUris) RequestedUris.Add(request.RequestUri);
             var json = _responseSelector(request);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             });
+        }
+    }
+
+    internal class DelayedHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly TimeSpan _delay;
+        private readonly string _json;
+        private int _requestCount;
+        public int RequestCount => _requestCount;
+
+        public DelayedHttpMessageHandler(TimeSpan delay, string json)
+        {
+            _delay = delay;
+            _json = json;
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _requestCount);
+            await Task.Delay(_delay, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(_json, Encoding.UTF8, "application/json")
+            };
+        }
+    }
+
+    internal class LambdaHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
+
+        public LambdaHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> respond)
+        {
+            _respond = respond;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_respond(request));
         }
     }
 }

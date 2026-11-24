@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
@@ -16,36 +15,12 @@ namespace WikiDataLib
     public static class WikiApi
     {
         private const string WikiApiBaseUrl = "https://en.wikipedia.org/api/rest_v1";
-        private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36";
-        private const int MaxRetryAttempts = 3;
+        private const string CommonsUploadBaseUrl = "https://upload.wikimedia.org/wikipedia/commons/";
 
-        // volatile ensures reads/writes to the field are not reordered by the JIT.
-        // SetHttpMessageHandlerForTesting is not thread-safe and must only be called
-        // from single-threaded test setup/teardown — never from concurrent production code.
-        private static volatile HttpClient _httpClient = CreateHttpClient(null);
-
-        private static readonly ConcurrentDictionary<string, JsonElement> _cache =
-            new ConcurrentDictionary<string, JsonElement>();
-
-        static WikiApi()
-        {
-        }
-
-        private static HttpClient CreateHttpClient(HttpMessageHandler? handler)
-        {
-            var client = handler != null
-                ? new HttpClient(handler, disposeHandler: false)
-                : new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(30);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
-            return client;
-        }
-
-        // Replaces the HTTP handler used for all requests — intended for unit tests only.
+        // Replaces the HTTP handler used for all requests (WikiApi and WikiData) — intended for unit tests only.
         internal static void SetHttpMessageHandlerForTesting(HttpMessageHandler? handler)
         {
-            _httpClient = CreateHttpClient(handler);
-            _cache.Clear();
+            WikiHttp.SetHttpMessageHandlerForTesting(handler);
         }
 
         /// <summary>
@@ -110,7 +85,7 @@ namespace WikiDataLib
 
             try
             {
-                var root = await ExecuteJsonRequestAsync(
+                var root = await WikiHttp.GetJsonAsync(
                     url,
                     cancellationToken,
                     notFoundMessage: $"No Wikipedia page found for title '{wikipediaTitle}'.").ConfigureAwait(false);
@@ -127,13 +102,31 @@ namespace WikiDataLib
             }
         }
 
-        private static async Task<Collection<WikiPerson>> GetPeopleOnThisDayAsync(
+        private static Task<Collection<WikiPerson>> GetPeopleOnThisDayAsync(
             string eventType,
             int month,
             int day,
             int? yearFilter,
             CancellationToken cancellationToken)
         {
+            return GetPeopleOnThisDayAsync(eventType, month, day, yearFilter, null, cancellationToken);
+        }
+
+        // limit: when set, stops collecting pages once `limit` are found, so image resolution
+        // and object construction only happen for the results actually returned.
+        internal static async Task<Collection<WikiPerson>> GetPeopleOnThisDayAsync(
+            string eventType,
+            int month,
+            int day,
+            int? yearFilter,
+            int? limit,
+            CancellationToken cancellationToken)
+        {
+            if (limit.HasValue && limit.Value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(limit), "Limit must be greater than 0.");
+            }
+
             ValidateMonthDay(month, day);
 
             if (yearFilter.HasValue && yearFilter.Value <= 0)
@@ -145,7 +138,7 @@ namespace WikiDataLib
 
             try
             {
-                var root = await ExecuteJsonRequestAsync(url, cancellationToken).ConfigureAwait(false);
+                var root = await WikiHttp.GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
 
                 if (!root.TryGetProperty(eventType, out var events) || events.ValueKind != JsonValueKind.Array)
                 {
@@ -153,7 +146,7 @@ namespace WikiDataLib
                 }
 
                 // Collect all candidate pages before any network call.
-                var pageEntries = new System.Collections.Generic.List<(JsonElement Page, int Year)>();
+                var pageEntries = new System.Collections.Generic.List<(JsonElement Page, int Year, string? Thumb)>();
                 foreach (var item in events.EnumerateArray())
                 {
                     var year = ExtractIntProperty(item, "year");
@@ -164,22 +157,26 @@ namespace WikiDataLib
                         continue;
 
                     foreach (var page in pages.EnumerateArray())
-                        pageEntries.Add((page, year));
+                    {
+                        if (limit.HasValue && pageEntries.Count >= limit.Value)
+                            break;
+                        pageEntries.Add((page, year, ExtractRawThumbnailSource(page)));
+                    }
+
+                    if (limit.HasValue && pageEntries.Count >= limit.Value)
+                        break;
                 }
 
-                // Batch-resolve all Commons thumbnail URLs in a single API call.
-                var thumbnailSources = pageEntries
-                    .Select(e => ExtractRawThumbnailSource(e.Page))
-                    .ToList();
-                var resolvedThumbnails = await ResolveCommonsFileUrlsBatchAsync(thumbnailSources, cancellationToken).ConfigureAwait(false);
+                // Batch-resolve all Commons thumbnail URLs (only for the pages being returned).
+                var resolvedThumbnails = await ResolveCommonsFileUrlsBatchAsync(
+                    pageEntries.Select(e => e.Thumb), cancellationToken).ConfigureAwait(false);
 
                 var people = new Collection<WikiPerson>();
                 foreach (var entry in pageEntries)
                 {
-                    var rawThumb = ExtractRawThumbnailSource(entry.Page);
                     string? resolvedThumb = null;
-                    if (rawThumb != null)
-                        resolvedThumbnails.TryGetValue(rawThumb, out resolvedThumb);
+                    if (entry.Thumb != null)
+                        resolvedThumbnails.TryGetValue(entry.Thumb, out resolvedThumb);
 
                     people.Add(BuildPersonFromPage(entry.Page, month, day, entry.Year, eventType, resolvedThumb));
                 }
@@ -340,8 +337,17 @@ namespace WikiDataLib
                 var fileName = Uri.UnescapeDataString(fileNameEncoded);
                 if (string.IsNullOrWhiteSpace(fileName)) continue;
 
-                // Use empty string as sentinel for "no width"; real width values are never empty.
-                var widthKey = ExtractWidthFromQuery(uri.Query) ?? string.Empty;
+                // No width requested: the original file URL is a pure function of the file name,
+                // so compute it locally instead of calling the imageinfo API.
+                var widthKey = ExtractWidthFromQuery(uri.Query);
+                if (widthKey == null)
+                {
+                    result[source] = BuildCommonsOriginalUrl(fileName);
+                    continue;
+                }
+
+                // Thumbnails still go through the API: their naming varies by file type
+                // (SVG→PNG, TIFF/PDF page prefixes) and widths larger than the original are not served.
                 if (!byWidth.TryGetValue(widthKey, out var group))
                 {
                     group = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -352,8 +358,7 @@ namespace WikiDataLib
 
             foreach (var widthGroup in byWidth)
             {
-                // Restore null for "no width" to control the API URL shape.
-                var widthParam = widthGroup.Key.Length > 0 ? widthGroup.Key : null;
+                string? widthParam = widthGroup.Key;
                 var titleToSource = widthGroup.Value;
 
                 // Chunk into batches of maxTitlesPerCall to stay within API limits.
@@ -364,13 +369,11 @@ namespace WikiDataLib
 
                     // Pipe-separate titles; encode each filename but keep | as literal separator.
                     var titlesParam = string.Join("|", chunk.Select(t => Uri.EscapeDataString(t)));
-                    var apiUrl = widthParam != null
-                        ? $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&iiurlwidth={widthParam}&format=json&origin=*"
-                        : $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&format=json&origin=*";
+                    var apiUrl = $"https://commons.wikimedia.org/w/api.php?action=query&titles={titlesParam}&prop=imageinfo&iiprop=url&iiurlwidth={Uri.EscapeDataString(widthParam)}&format=json&origin=*";
 
                     try
                     {
-                        var root = await ExecuteJsonRequestAsync(apiUrl, cancellationToken).ConfigureAwait(false);
+                        var root = await WikiHttp.GetJsonAsync(apiUrl, cancellationToken).ConfigureAwait(false);
                         ParseImageInfoResponse(root, widthParam, titleToSource, result);
                     }
                     catch (Exception ex) when (ex is HttpRequestException || ex is JsonException || ex is InvalidOperationException)
@@ -444,6 +447,51 @@ namespace WikiDataLib
                 if (!string.IsNullOrWhiteSpace(urlProp))
                     result[originalSource] = StripQueryParams(urlProp, "utm_source", "utm_campaign", "utm_content");
             }
+        }
+
+        // Builds the direct upload.wikimedia.org URL for a Commons file, following MediaWiki's
+        // hashed upload directory layout: /{md5[0]}/{md5[0..2]}/{File_name}.
+        // Example: "Elvis Presley promoting Jailhouse Rock.jpg"
+        //   → https://upload.wikimedia.org/wikipedia/commons/9/99/Elvis_Presley_promoting_Jailhouse_Rock.jpg
+        internal static string BuildCommonsOriginalUrl(string fileName)
+        {
+            var dbKey = NormalizeCommonsFileName(fileName);
+
+            string hash;
+            using (var md5 = System.Security.Cryptography.MD5.Create())
+            {
+                // Only the first byte (two hex chars) of the digest is needed for the path.
+                var digest = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(dbKey));
+                hash = digest[0].ToString("x2", CultureInfo.InvariantCulture);
+            }
+
+            // Upload URLs use plain RFC 3986 encoding (e.g. ',' → %2C, '(' → %28, '&' → %26),
+            // which is exactly what Uri.EscapeDataString produces.
+            return CommonsUploadBaseUrl + hash[0] + "/" + hash + "/" + Uri.EscapeDataString(dbKey);
+        }
+
+        // MediaWiki title normalization for file names: spaces → underscores, runs collapsed,
+        // ends trimmed, and first character upper-cased (File namespace is first-letter case-insensitive).
+        private static string NormalizeCommonsFileName(string fileName)
+        {
+            var sb = new System.Text.StringBuilder(fileName.Length);
+            foreach (var c in fileName.Trim())
+            {
+                var ch = c == ' ' ? '_' : c;
+                if (ch == '_' && sb.Length > 0 && sb[sb.Length - 1] == '_')
+                    continue;
+                sb.Append(ch);
+            }
+
+            while (sb.Length > 0 && sb[sb.Length - 1] == '_')
+                sb.Length--;
+            while (sb.Length > 0 && sb[0] == '_')
+                sb.Remove(0, 1);
+
+            if (sb.Length > 0 && !char.IsSurrogate(sb[0]))
+                sb[0] = char.ToUpperInvariant(sb[0]);
+
+            return sb.ToString();
         }
 
         // Parses ?width=N or &width=N from a raw query string (e.g. "?width=330").
@@ -556,75 +604,6 @@ namespace WikiDataLib
             {
                 throw new ArgumentOutOfRangeException(nameof(day), $"Day must be between 1 and {maxDay} for month {month}.");
             }
-        }
-
-        private static async Task<JsonElement> ExecuteJsonRequestAsync(
-            string url,
-            CancellationToken cancellationToken,
-            string? notFoundMessage = null)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (_cache.TryGetValue(url, out var cached))
-            {
-                return cached;
-            }
-
-            for (var attempt = 1; attempt <= MaxRetryAttempts; attempt++)
-            {
-                try
-                {
-                    using (var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false))
-                    {
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            var code = (int)response.StatusCode;
-                            if (code == 404 && notFoundMessage != null)
-                            {
-                                throw new InvalidOperationException(notFoundMessage);
-                            }
-
-                            var isTransient = code == 429 || code >= 500;
-                            if (isTransient && attempt < MaxRetryAttempts)
-                            {
-                                var delay = code == 429
-                                    ? TimeSpan.FromSeconds(Math.Pow(2, attempt + 1))
-                                    : TimeSpan.FromSeconds(Math.Pow(2, attempt));
-
-                                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-                                continue;
-                            }
-
-                            response.EnsureSuccessStatusCode();
-                        }
-
-                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        using (var doc = JsonDocument.Parse(json))
-                        {
-                            var result = doc.RootElement.Clone();
-
-                            if (_cache.Count >= 256)
-                            {
-                                _cache.Clear();
-                            }
-
-                            _cache.TryAdd(url, result);
-                            return result;
-                        }
-                    }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex) when (attempt < MaxRetryAttempts &&
-                    (ex is HttpRequestException || ex is OperationCanceledException || ex is TaskCanceledException))
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            throw new InvalidOperationException("Retry loop exhausted unexpectedly.");
         }
     }
 }
