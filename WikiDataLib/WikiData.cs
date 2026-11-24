@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
@@ -17,10 +16,8 @@ namespace WikiDataLib
     public static class WikiData
     {
         private const string WikiDataSparqlEndpoint = "https://query.wikidata.org/sparql";
-        private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36";
         private const string WikiDataEntityUrlPrefix = "http://www.wikidata.org/entity/Q";
         private const int WikiDataEntityPrefixLength = 32;
-        private const int MaxRetryAttempts = 3;
 
         // SPARQL query field names
         private const string FieldItem = "item";
@@ -30,20 +27,6 @@ namespace WikiDataLib
         private const string FieldDeathDate = "RIP";
         private const string FieldImage = "image";
         private const string FieldArticle = "article";
-
-        private static readonly HttpClient _httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(30)
-        };
-
-        // In-memory cache keyed by SPARQL query string
-        private static readonly ConcurrentDictionary<string, JsonElement> _cache =
-            new ConcurrentDictionary<string, JsonElement>();
-
-        static WikiData()
-        {
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
-        }
 
         /// <summary>
         /// Searches for people in WikiData by name.
@@ -124,7 +107,7 @@ namespace WikiDataLib
         private static async Task<Collection<int>> SearchEntityIdsAsync(string searchString, CancellationToken cancellationToken)
         {
             var url = $"https://www.wikidata.org/w/api.php?action=query&list=search&srsearch={Uri.EscapeDataString(searchString)}&format=json&srlimit=50&origin=*";
-            var root = await ExecuteJsonRequestAsync(url, cancellationToken).ConfigureAwait(false);
+            var root = await WikiHttp.GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
 
             var entityIds = new Collection<int>();
 
@@ -220,7 +203,7 @@ namespace WikiDataLib
             CancellationToken cancellationToken = default)
         {
             ValidateMonthDayLimit(month, day, limit);
-            return TrimResultsAsync(WikiApi.GetBornOnDateAsync(month, day, cancellationToken), limit);
+            return WikiApi.GetPeopleOnThisDayAsync("births", month, day, null, limit, cancellationToken);
         }
 
         /// <summary>
@@ -233,7 +216,7 @@ namespace WikiDataLib
             CancellationToken cancellationToken = default)
         {
             ValidateMonthDayLimit(month, day, limit);
-            return TrimResultsAsync(WikiApi.GetDiedOnDateAsync(month, day, cancellationToken), limit);
+            return WikiApi.GetPeopleOnThisDayAsync("deaths", month, day, null, limit, cancellationToken);
         }
 
         /// <summary>
@@ -247,7 +230,7 @@ namespace WikiDataLib
             CancellationToken cancellationToken = default)
         {
             ValidateYearMonthDayLimit(year, month, day, limit);
-            return TrimResultsAsync(WikiApi.GetDiedOnDateAsync(year, month, day, cancellationToken), limit);
+            return WikiApi.GetPeopleOnThisDayAsync("deaths", month, day, year, limit, cancellationToken);
         }
 
         /// <summary>
@@ -261,15 +244,7 @@ namespace WikiDataLib
             CancellationToken cancellationToken = default)
         {
             ValidateYearMonthDayLimit(year, month, day, limit);
-            return TrimResultsAsync(WikiApi.GetBornOnDateAsync(year, month, day, cancellationToken), limit);
-        }
-
-        private static async Task<Collection<WikiPerson>> TrimResultsAsync(
-            Task<Collection<WikiPerson>> peopleTask,
-            int limit)
-        {
-            var people = await peopleTask.ConfigureAwait(false);
-            return new Collection<WikiPerson>(people.Take(limit).ToList());
+            return WikiApi.GetPeopleOnThisDayAsync("births", month, day, year, limit, cancellationToken);
         }
 
         private static string BuildSearchQuery(Collection<int> entityIds, string searchPattern)
@@ -319,71 +294,6 @@ namespace WikiDataLib
                 "GROUP BY ?item ?itemLabel ?itemDescription";
         }
 
-        private static string BuildPeopleOnDateQuery(string dateProperty, int month, int day, int limit)
-        {
-            string requiredDateAssignment;
-            string optionalOtherDateBinding;
-
-            if (dateProperty == "P569")
-            {
-                requiredDateAssignment = "BIND(?date AS ?DR) ";
-                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P570 ?RIP } ";
-            }
-            else if (dateProperty == "P570")
-            {
-                requiredDateAssignment = "BIND(?date AS ?RIP) ";
-                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P569 ?DR } ";
-            }
-            else
-            {
-                throw new ArgumentException("Unsupported date property.", nameof(dateProperty));
-            }
-
-            return "SELECT distinct ?item ?itemLabel ?itemDescription ?DR ?RIP " +
-                "WHERE { " +
-                "?item wdt:P31 wd:Q5. " +
-                "?item wdt:" + dateProperty + " ?date. " +
-                $"FILTER(MONTH(?date) = {month} && DAY(?date) = {day}). " +
-                requiredDateAssignment +
-                optionalOtherDateBinding +
-                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. } " +
-                $"}} LIMIT {limit}";
-        }
-
-        private static string BuildPeopleOnDateQuery(string dateProperty, int year, int month, int day, int limit)
-        {
-            string requiredDateAssignment;
-            string optionalOtherDateBinding;
-            string dateBinding;
-
-            if (dateProperty == "P569")
-            {
-                requiredDateAssignment = "BIND(?date AS ?DR) ";
-                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P570 ?RIP } ";
-                dateBinding = "?DR";
-            }
-            else if (dateProperty == "P570")
-            {
-                requiredDateAssignment = "BIND(?date AS ?RIP) ";
-                optionalOtherDateBinding = "OPTIONAL { ?item wdt:P569 ?DR } ";
-                dateBinding = "?RIP";
-            }
-            else
-            {
-                throw new ArgumentException("Unsupported date property.", nameof(dateProperty));
-            }
-
-            return "SELECT distinct ?item ?itemLabel ?itemDescription ?DR ?RIP " +
-                "WHERE { " +
-                "?item wdt:P31 wd:Q5. " +
-                "?item wdt:" + dateProperty + " ?date. " +
-                requiredDateAssignment +
-                $"FILTER(YEAR({dateBinding}) = {year} && MONTH({dateBinding}) = {month} && DAY({dateBinding}) = {day}). " +
-                optionalOtherDateBinding +
-                "SERVICE wikibase:label { bd:serviceParam wikibase:language 'en,mul'. } " +
-                $"}} LIMIT {limit}";
-        }
-
         private static void ValidateMonthDayLimit(int month, int day, int limit)
         {
             if (month < 1 || month > 12)
@@ -417,65 +327,7 @@ namespace WikiDataLib
         {
             var url = $"{WikiDataSparqlEndpoint}?query={Uri.EscapeDataString(query)}&format=json";
 
-            return await ExecuteJsonRequestAsync(url, cancellationToken).ConfigureAwait(false);
-        }
-
-        private static async Task<JsonElement> ExecuteJsonRequestAsync(string url, CancellationToken cancellationToken)
-        {
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (_cache.TryGetValue(url, out var cached))
-            {
-                return cached;
-            }
-
-            for (int attempt = 1; attempt <= MaxRetryAttempts; attempt++)
-            {
-                try
-                {
-                    using (var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false))
-                    {
-                        // Only retry transient server errors (429, 5xx); fail fast on 4xx
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            var code = (int)response.StatusCode;
-                            bool isTransient = code == 429 || code >= 500;
-                            if (!isTransient || attempt >= MaxRetryAttempts)
-                            {
-                                response.EnsureSuccessStatusCode();
-                            }
-                            var delay = code == 429
-                                ? TimeSpan.FromSeconds(Math.Pow(2, attempt + 1))
-                                : TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-                            continue;
-                        }
-
-                        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                        using (var doc = JsonDocument.Parse(json))
-                        {
-                            var result = doc.RootElement.Clone();
-                            _cache.TryAdd(url, result);
-                            return result;
-                        }
-                    }
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    // User-requested cancellation — do not retry
-                    throw;
-                }
-                catch (Exception ex) when (attempt < MaxRetryAttempts &&
-                    (ex is HttpRequestException || ex is OperationCanceledException || ex is TaskCanceledException))
-                {
-                    // Transient network error or timeout — retry with backoff
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            // Unreachable: loop always returns or throws before exhaustion
-            throw new InvalidOperationException("Retry loop exhausted unexpectedly.");
+            return await WikiHttp.GetJsonAsync(url, cancellationToken).ConfigureAwait(false);
         }
 
         private static bool TryGetBindings(JsonElement root, out JsonElement bindings)

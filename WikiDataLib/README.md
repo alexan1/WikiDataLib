@@ -385,6 +385,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
+### Unreleased
+- Performance: HTTP responses are now requested compressed (gzip/deflate, plus brotli on .NET 5+) (the "On this day" feed shrinks ~6x on the wire)
+- Performance: full-size Commons image URLs are computed locally from the file name, removing one Commons API round-trip from `WikiPeopleSearchAsync` and `GetWikiPersonAsync(int)`
+- Performance: `GetPeopleBornOnDateAsync` / `GetPeopleDiedOnDateAsync` only build and resolve images for the first `limit` people
+- Response cache is now bounded (512 entries / 64 MB, LRU) with a 1-hour TTL, and concurrent identical requests share a single HTTP call
+- Requests now send a descriptive `WikiDataLib/<version>` User-Agent as required by the Wikimedia User-Agent policy
+- Retries honour `Retry-After` and use jittered backoff; non-transient 4xx errors now fail fast instead of being retried
+
 ### v1.3.0
 - `Image` field on `WikiPerson` now returns a direct `upload.wikimedia.org` URL resolved via the Commons `imageinfo` API, eliminating the `commons.wikimedia.org` redirect hop that caused image load failures under certain browser extensions (e.g. uBlock Origin in Edge)
 - Image URLs are batch-resolved in a single API call per search or date-feed request, minimising round-trips
