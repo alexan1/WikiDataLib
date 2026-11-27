@@ -94,7 +94,7 @@ namespace WikiDataLib
 
                 return new Collection<WikiPerson>(foundPersons);
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException ex) when (!(ex is WikiRateLimitException))
             {
                 throw new HttpRequestException($"Failed to retrieve WikiData search results for '{searchString}'.", ex);
             }
@@ -175,7 +175,7 @@ namespace WikiDataLib
 
                 return person;
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException ex) when (!(ex is WikiRateLimitException))
             {
                 throw new HttpRequestException($"Failed to retrieve WikiData person with ID Q{id}.", ex);
             }

@@ -92,7 +92,7 @@ namespace WikiDataLib
 
                 return await BuildPersonFromSummaryAsync(root, cancellationToken).ConfigureAwait(false);
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException ex) when (!(ex is WikiRateLimitException))
             {
                 throw new HttpRequestException($"Failed to retrieve Wikipedia summary for '{wikipediaTitle}'.", ex);
             }
@@ -183,7 +183,7 @@ namespace WikiDataLib
 
                 return people;
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException ex) when (!(ex is WikiRateLimitException))
             {
                 throw new HttpRequestException($"Failed to retrieve Wikipedia people {eventType} on {month}/{day}.", ex);
             }
