@@ -13,8 +13,10 @@ namespace WikiDataLib
 {
     /// <summary>
     /// Shared HTTP transport for all Wikimedia requests: one pooled HttpClient with
-    /// response compression, a descriptive User-Agent, retries, and a bounded TTL cache
+    /// response compression, a descriptive User-Agent, retries for transient errors, and a bounded TTL cache
     /// that also coalesces concurrent requests for the same URL.
+    /// HTTP 429 is never retried: it throws <see cref="WikiRateLimitException"/> and starts a cooldown during which
+    /// requests fail fast without touching the network (cached responses are still served).
     /// </summary>
     internal static class WikiHttp
     {
@@ -28,6 +30,15 @@ namespace WikiDataLib
         // Wikimedia's User-Agent policy asks clients to identify themselves with contact info.
         // Generic browser user agents are more aggressively rate-limited.
         internal static readonly string UserAgent = BuildUserAgent();
+
+        // Set through WikiDataSettings; read per request.
+        internal static volatile string? ApplicationUserAgent;
+        internal static volatile string? AccessToken;
+
+        // Cooldown after a 429: Retry-After when present, else the default; capped so a bad header cannot block forever.
+        internal static readonly TimeSpan DefaultRateLimitDelay = TimeSpan.FromSeconds(30);
+        internal static readonly TimeSpan MaxRateLimitDelay = TimeSpan.FromMinutes(10);
+        private static long _rateLimitedUntilTicks;
 
         // volatile ensures reads/writes to the field are not reordered by the JIT.
         // SetHttpMessageHandlerForTesting is not thread-safe and must only be called
@@ -111,7 +122,6 @@ namespace WikiDataLib
             }
 
             client.Timeout = TimeSpan.FromSeconds(30);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
             return client;
         }
 
@@ -120,6 +130,52 @@ namespace WikiDataLib
         {
             _httpClient = CreateHttpClient(handler);
             ClearCache();
+            Interlocked.Exchange(ref _rateLimitedUntilTicks, 0);
+        }
+
+        // Remaining cooldown after a 429, or zero.
+        internal static TimeSpan RateLimitRemaining
+        {
+            get
+            {
+                var remaining = new DateTime(Interlocked.Read(ref _rateLimitedUntilTicks), DateTimeKind.Utc) - DateTime.UtcNow;
+                return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+            }
+        }
+
+        private static void StartRateLimitCooldown(TimeSpan delay)
+        {
+            var until = (DateTime.UtcNow + delay).Ticks;
+            long current;
+            do
+            {
+                current = Interlocked.Read(ref _rateLimitedUntilTicks);
+                if (current >= until)
+                {
+                    return;
+                }
+            }
+            while (Interlocked.CompareExchange(ref _rateLimitedUntilTicks, until, current) != current);
+        }
+
+        private static HttpRequestMessage CreateRequest(string url)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            var applicationUserAgent = ApplicationUserAgent;
+            if (applicationUserAgent != null)
+            {
+                request.Headers.UserAgent.ParseAdd(applicationUserAgent);
+            }
+
+            request.Headers.UserAgent.ParseAdd(UserAgent);
+
+            var accessToken = AccessToken;
+            if (accessToken != null)
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            }
+
+            return request;
         }
 
         internal static void ClearCache()
@@ -278,11 +334,23 @@ namespace WikiDataLib
 
             for (var attempt = 1; attempt <= MaxRetryAttempts; attempt++)
             {
+                var cooldown = RateLimitRemaining;
+                if (cooldown > TimeSpan.Zero)
+                {
+                    throw new WikiRateLimitException(
+                        $"Request skipped: Wikimedia rate limit (HTTP 429) cooldown active for another {Math.Ceiling(cooldown.TotalSeconds):F0}s.",
+                        cooldown);
+                }
+
                 HttpResponseMessage response;
                 byte[]? bytes = null;
                 try
                 {
-                    response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                    using (var request = CreateRequest(url))
+                    {
+                        response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                    }
+
                     if (response.IsSuccessStatusCode)
                     {
                         // Read as UTF-8 bytes (no UTF-16 string copy); parsed below.
@@ -318,10 +386,22 @@ namespace WikiDataLib
                         throw new InvalidOperationException(notFoundMessage);
                     }
 
-                    var isTransient = code == 429 || code >= 500;
-                    if (isTransient && attempt < MaxRetryAttempts)
+                    if (code == 429)
                     {
-                        await Task.Delay(GetRetryDelay(response, attempt, code == 429)).ConfigureAwait(false);
+                        // Retrying a 429 only makes the limit worse: fail now and pause all requests.
+                        var delay = GetRetryAfter(response) ?? DefaultRateLimitDelay;
+                        StartRateLimitCooldown(delay);
+                        throw new WikiRateLimitException(
+                            $"Wikimedia rate limited the request (HTTP 429). Retry after {Math.Ceiling(delay.TotalSeconds):F0}s.",
+                            delay);
+                    }
+
+                    if (code >= 500 && attempt < MaxRetryAttempts)
+                    {
+                        var retryAfter = GetRetryAfter(response);
+                        await Task.Delay(retryAfter.HasValue && retryAfter.Value < TimeSpan.FromSeconds(30)
+                            ? retryAfter.Value
+                            : GetBackoff(attempt)).ConfigureAwait(false);
                         continue;
                     }
 
@@ -332,25 +412,27 @@ namespace WikiDataLib
             throw new InvalidOperationException("Retry loop exhausted unexpectedly.");
         }
 
-        private static TimeSpan GetRetryDelay(HttpResponseMessage response, int attempt, bool isRateLimited)
+        // Parses Retry-After (seconds or HTTP date), capped at MaxRateLimitDelay. Null when absent or not in the future.
+        private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
         {
             var retryAfter = response.Headers.RetryAfter;
-            if (retryAfter != null)
+            if (retryAfter == null)
             {
-                TimeSpan? delay = retryAfter.Delta;
-                if (!delay.HasValue && retryAfter.Date.HasValue)
-                {
-                    delay = retryAfter.Date.Value - DateTimeOffset.UtcNow;
-                }
-
-                if (delay.HasValue && delay.Value > TimeSpan.Zero)
-                {
-                    // Cap so a hostile/huge Retry-After cannot stall callers indefinitely.
-                    return delay.Value < TimeSpan.FromSeconds(30) ? delay.Value : TimeSpan.FromSeconds(30);
-                }
+                return null;
             }
 
-            return GetBackoff(isRateLimited ? attempt + 1 : attempt);
+            TimeSpan? delay = retryAfter.Delta;
+            if (!delay.HasValue && retryAfter.Date.HasValue)
+            {
+                delay = retryAfter.Date.Value - DateTimeOffset.UtcNow;
+            }
+
+            if (!delay.HasValue || delay.Value <= TimeSpan.Zero)
+            {
+                return null;
+            }
+
+            return delay.Value < MaxRateLimitDelay ? delay.Value : MaxRateLimitDelay;
         }
 
         private static readonly ThreadLocal<Random> _jitter =

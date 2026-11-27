@@ -379,6 +379,8 @@ namespace WikiDataTest
         public void ResetHttpHandler()
         {
             WikiApi.SetHttpMessageHandlerForTesting(null);
+            WikiDataSettings.SetUserAgent(null);
+            WikiDataSettings.SetAccessToken(null);
         }
 
         [TestMethod]
@@ -682,6 +684,116 @@ namespace WikiDataTest
             var ua = handler.LastRequest!.Headers.UserAgent.ToString();
             StringAssert.StartsWith(ua, "WikiDataLib/");
             StringAssert.Contains(ua, "github.com/alexan1/WikiDataLib");
+            Assert.IsNull(handler.LastRequest.Headers.Authorization);
+        }
+
+        [TestMethod]
+        public async Task WhenApplicationUserAgentAndTokenConfigured_ShouldSendThemOnEveryRequest()
+        {
+            WikiDataSettings.SetUserAgent("TestApp/2.0 (https://example.com; ops@example.com)");
+            WikiDataSettings.SetAccessToken("test-token");
+            var handler = new FakeHttpMessageHandler(_ => @"{""title"":""X"",""wikibase_item"":""Q1""}");
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            await WikiApi.GetWikiPersonAsync("X");
+
+            var ua = handler.LastRequest!.Headers.UserAgent.ToString();
+            StringAssert.StartsWith(ua, "TestApp/2.0 (https://example.com; ops@example.com)");
+            StringAssert.Contains(ua, "WikiDataLib/");
+            Assert.AreEqual("Bearer", handler.LastRequest.Headers.Authorization!.Scheme);
+            Assert.AreEqual("test-token", handler.LastRequest.Headers.Authorization.Parameter);
+        }
+
+        [TestMethod]
+        public void WhenApplicationUserAgentIsInvalid_ShouldThrowArgumentException()
+        {
+            Assert.ThrowsException<ArgumentException>(() => WikiDataSettings.SetUserAgent("Bad (unclosed"));
+        }
+
+        [TestMethod]
+        public async Task WhenRateLimited_ShouldNotRetryAndShouldExposeRetryAfter()
+        {
+            var calls = 0;
+            var handler = new LambdaHttpMessageHandler(_ =>
+            {
+                Interlocked.Increment(ref calls);
+                var response = new HttpResponseMessage((HttpStatusCode)429);
+                response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(120));
+                return response;
+            });
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            var ex = await Assert.ThrowsExceptionAsync<WikiRateLimitException>(() => WikiApi.GetWikiPersonAsync("Elvis Presley"));
+
+            Assert.AreEqual(TimeSpan.FromSeconds(120), ex.RetryAfter);
+            Assert.AreEqual(1, calls, "A 429 must not be retried");
+            StringAssert.Contains(ex.Message, "429");
+        }
+
+        [TestMethod]
+        public async Task WhenRateLimited_ShouldSkipNetworkDuringCooldown()
+        {
+            var calls = 0;
+            var handler = new LambdaHttpMessageHandler(_ =>
+            {
+                Interlocked.Increment(ref calls);
+                return new HttpResponseMessage((HttpStatusCode)429);
+            });
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            var first = await Assert.ThrowsExceptionAsync<WikiRateLimitException>(() => WikiApi.GetWikiPersonAsync("Elvis Presley"));
+            Assert.AreEqual(TimeSpan.FromSeconds(30), first.RetryAfter, "Default cooldown when Retry-After is missing");
+
+            // A different request (and a different API) during the cooldown never reaches the network.
+            var second = await Assert.ThrowsExceptionAsync<WikiRateLimitException>(() => WikiData.GetWikiPersonAsync(303));
+            Assert.IsTrue(second.RetryAfter > TimeSpan.Zero && second.RetryAfter <= TimeSpan.FromSeconds(30));
+            Assert.AreEqual(1, calls);
+        }
+
+        [TestMethod]
+        public async Task WhenCachedDuringCooldown_ShouldStillServeCache()
+        {
+            var rateLimit = false;
+            var handler = new LambdaHttpMessageHandler(req => rateLimit
+                ? new HttpResponseMessage((HttpStatusCode)429)
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(@"{""title"":""Elvis Presley"",""wikibase_item"":""Q303""}", Encoding.UTF8, "application/json")
+                });
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            await WikiApi.GetWikiPersonAsync("Elvis Presley");
+            rateLimit = true;
+            await Assert.ThrowsExceptionAsync<WikiRateLimitException>(() => WikiApi.GetWikiPersonAsync("Someone Else"));
+
+            var cached = await WikiApi.GetWikiPersonAsync("Elvis Presley");
+            Assert.AreEqual(303, cached.Id);
+        }
+
+        [TestMethod]
+        public async Task WhenServerErrorThenSuccess_ShouldStillRetry()
+        {
+            var calls = 0;
+            var handler = new LambdaHttpMessageHandler(_ =>
+            {
+                if (Interlocked.Increment(ref calls) == 1)
+                {
+                    var error = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+                    error.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMilliseconds(100));
+                    return error;
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(@"{""title"":""Elvis Presley"",""wikibase_item"":""Q303""}", Encoding.UTF8, "application/json")
+                };
+            });
+            WikiApi.SetHttpMessageHandlerForTesting(handler);
+
+            var person = await WikiApi.GetWikiPersonAsync("Elvis Presley");
+
+            Assert.AreEqual(303, person.Id);
+            Assert.AreEqual(2, calls);
         }
 
         #endregion

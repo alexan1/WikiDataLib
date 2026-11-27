@@ -76,10 +76,27 @@ catch (InvalidOperationException ex)
 {
     Console.WriteLine($"Person not found: {ex.Message}");
 }
+catch (WikiRateLimitException ex)
+{
+    // HTTP 429 from Wikimedia. Not retried by the library; wait at least ex.RetryAfter.
+    Console.WriteLine($"Rate limited, retry after {ex.RetryAfter}");
+}
 catch (HttpRequestException ex)
 {
     Console.WriteLine($"Network error: {ex.Message}");
 }
+```
+
+### Identifying Your Application
+
+Wikimedia rate-limits unidentified clients the hardest. Call once at startup, before the first request:
+
+```csharp
+// See https://meta.wikimedia.org/wiki/User-Agent_policy
+WikiDataSettings.SetUserAgent("MyApp/1.0 (https://example.com; contact@example.com)");
+
+// Optional: Wikimedia OAuth 2.0 access token (e.g. an owner-only consumer), sent as a Bearer token.
+WikiDataSettings.SetAccessToken(Environment.GetEnvironmentVariable("WIKIMEDIA_ACCESS_TOKEN"));
 ```
 
 ## API Reference
@@ -385,13 +402,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Changelog
 
-### Unreleased
+### v1.4.0
+- **Rate limiting:** HTTP 429 is no longer retried. It throws the new `WikiRateLimitException` (derives from `HttpRequestException`) with `RetryAfter` taken from the `Retry-After` header (default 30 s, capped at 10 min). Until then, further requests fail fast with the same exception without hitting the network; cached responses are still served
+- New `WikiDataSettings.SetUserAgent(...)` identifies your application to Wikimedia (sent before the library's own User-Agent), and `WikiDataSettings.SetAccessToken(...)` sends an optional OAuth 2.0 bearer token
 - Performance: HTTP responses are now requested compressed (gzip/deflate, plus brotli on .NET 5+) (the "On this day" feed shrinks ~6x on the wire)
 - Performance: full-size Commons image URLs are computed locally from the file name, removing one Commons API round-trip from `WikiPeopleSearchAsync` and `GetWikiPersonAsync(int)`
 - Performance: `GetPeopleBornOnDateAsync` / `GetPeopleDiedOnDateAsync` only build and resolve images for the first `limit` people
 - Response cache is now bounded (512 entries / 64 MB, LRU) with a 1-hour TTL, and concurrent identical requests share a single HTTP call
 - Requests now send a descriptive `WikiDataLib/<version>` User-Agent as required by the Wikimedia User-Agent policy
-- Retries honour `Retry-After` and use jittered backoff; non-transient 4xx errors now fail fast instead of being retried
+- Retries of transient 5xx/network errors honour `Retry-After` and use jittered backoff; non-transient 4xx errors now fail fast instead of being retried
 
 ### v1.3.0
 - `Image` field on `WikiPerson` now returns a direct `upload.wikimedia.org` URL resolved via the Commons `imageinfo` API, eliminating the `commons.wikimedia.org` redirect hop that caused image load failures under certain browser extensions (e.g. uBlock Origin in Edge)
